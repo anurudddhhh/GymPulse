@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dark: #121212;
+  --color-card: #1E1E1E;
+  --color-primary: #3B82F6;
+  --color-accent: #10B981;
+}
+
+body {
+  @apply bg-dark text-white min-h-screen font-sans;
+}
