@@ -4,13 +4,10 @@ import axios from 'axios';
 
 export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
-  // 1. New state variable to track password visibility
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,44 +20,45 @@ export default function Login() {
     }
   };
 
+  // Shared styling for all inputs to keep code clean
+  const inputClass = "w-full bg-[#27272a] rounded-2xl px-5 py-4 text-lg font-medium placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all border border-transparent focus:border-blue-500";
+
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
-      <div className="bg-card p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-800">
-        <h2 className="text-3xl font-bold mb-6 text-center text-primary">GymPulse Login</h2>
+    <div className="flex items-center justify-center min-h-screen bg-[#09090b] text-white p-4 font-sans">
+      <div className="w-full max-w-md bg-[#18181b] rounded-3xl p-8 border border-zinc-800/80 shadow-2xl">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-extrabold tracking-tight">Welcome Back</h2>
+          <p className="text-zinc-500 font-medium mt-2">Log in to GymPulse to continue.</p>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input 
-            type="email" 
-            name="email" 
-            placeholder="Email" 
-            onChange={handleChange} 
-            required 
-            className="w-full p-3 bg-dark rounded border border-gray-700 focus:border-primary outline-none" 
-          />
-          
-          {/* 2. Password wrapper with the toggle button */}
+          <input type="email" name="email" placeholder="Email" onChange={handleChange} required className={inputClass} />
+
           <div className="relative">
-            <input 
-              // 3. Toggles between text and password type
-              type={showPassword ? "text" : "password"} 
-              name="password" 
-              placeholder="Password" 
-              onChange={handleChange} 
-              required 
-              className="w-full p-3 bg-dark rounded border border-gray-700 focus:border-primary outline-none pr-16" 
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder="Password"
+              onChange={handleChange}
+              required
+              className={`${inputClass} pr-20`}
             />
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-3 text-gray-400 hover:text-white text-sm font-bold transition-colors"
+              className="absolute right-5 top-[18px] text-zinc-500 hover:text-white text-sm font-extrabold transition-colors tracking-wide"
             >
               {showPassword ? "HIDE" : "SHOW"}
             </button>
           </div>
 
-          <button type="submit" className="w-full bg-primary text-white p-3 rounded font-bold hover:bg-blue-600 transition">Log In</button>
+          <button type="submit" className="w-full mt-2 bg-blue-600 text-white py-4 rounded-2xl font-extrabold text-lg shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:bg-blue-500 active:scale-[0.98] transition-all">
+            Log In
+          </button>
         </form>
-        <p className="mt-4 text-center text-gray-400 text-sm">
-          Don't have an account? <Link to="/" className="text-primary hover:underline">Register</Link>
+
+        <p className="mt-8 text-center text-zinc-500 font-medium">
+          Don't have an account? <Link to="/" className="text-blue-500 hover:text-blue-400 transition-colors">Register</Link>
         </p>
       </div>
     </div>
