@@ -138,4 +138,57 @@ router.get('/history/:exerciseName', authMiddleware, async (req, res) => {
   }
 });
 
+
+// @route   GET /api/workouts/prs
+// @desc    Get all-time physical Personal Records (Heaviest weight, broken by max reps)
+// @access  Private
+router.get('/prs', authMiddleware, async (req, res) => {
+  try {
+    const workouts = await Workout.find({ userId: req.user.userId });
+    const prTracker = {};
+
+    workouts.forEach(workout => {
+      workout.exercises.forEach(ex => {
+        if (!ex.exerciseName) return;
+        
+        const cleanName = ex.exerciseName.trim().toLowerCase();
+        
+        ex.sets.forEach(set => {
+          const w = Number(set.weight);
+          const r = Number(set.reps);
+          
+          if (w > 0 && r > 0) {
+            if (!prTracker[cleanName]) {
+              prTracker[cleanName] = {
+                name: ex.exerciseName.trim(),
+                weight: w,
+                reps: r
+              };
+            } else {
+              // Priority 1: If current weight is heavier, it's an absolute new PR
+              if (w > prTracker[cleanName].weight) {
+                prTracker[cleanName] = { name: ex.exerciseName.trim(), weight: w, reps: r };
+              } 
+              // Priority 2: If weights match exactly, check if you pushed more reps
+              else if (w === prTracker[cleanName].weight && r > prTracker[cleanName].reps) {
+                prTracker[cleanName] = { name: ex.exerciseName.trim(), weight: w, reps: r };
+              }
+            }
+          }
+        });
+      });
+    });
+
+    const prList = Object.values(prTracker).map(pr => ({
+      name: pr.name.charAt(0).toUpperCase() + pr.name.slice(1),
+      weight: pr.weight,
+      reps: pr.reps
+    })).slice(0, 6);
+
+    res.json(prList);
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error: Could not compile physical milestones' });
+  }
+});
+
 module.exports = router;

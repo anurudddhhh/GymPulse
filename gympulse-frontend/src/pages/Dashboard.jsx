@@ -5,12 +5,14 @@ import axios from 'axios';
 export default function Dashboard() {
   const [workouts, setWorkouts] = useState([]);
   const [activityData, setActivityData] = useState([]);
+  const [prs, setPrs] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchWorkouts();
     fetchActivity();
+    fetchPRs();
   }, []);
 
   const fetchWorkouts = async () => {
@@ -31,11 +33,30 @@ export default function Dashboard() {
       const res = await axios.get('http://localhost:5000/api/workouts/activity', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      // We don't need to pad 365 days anymore, just store the raw active dates
       setActivityData(res.data);
     } catch (err) {
       console.error("Failed to fetch activity data", err);
     }
+  };
+
+  const fetchPRs = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get('http://localhost:5000/api/workouts/prs', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPrs(res.data);
+    } catch (err) {
+      console.error("Failed to fetch PRs", err);
+    }
+  };
+
+  // Inline Client-Side Helper to calculate Est. 1RM for every individual set log
+  const calculate1RM = (weight, reps) => {
+    const w = Number(weight);
+    const r = Number(reps);
+    if (!w || !r) return 0;
+    return r === 1 ? w : Math.round(w * (1 + r / 30));
   };
 
   const handleDelete = async (id) => {
@@ -46,7 +67,8 @@ export default function Dashboard() {
         headers: { Authorization: `Bearer ${token}` }
       });
       setWorkouts(workouts.filter(workout => workout._id !== id));
-      fetchActivity(); // Refresh fire dates
+      fetchActivity();
+      fetchPRs();
     } catch (err) {
       alert('Failed to delete workout');
     }
@@ -57,7 +79,6 @@ export default function Dashboard() {
     navigate('/login');
   };
 
-  // --- Custom Monthly Calendar Logic ---
   const changeMonth = (offset) => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1));
   };
@@ -65,58 +86,27 @@ export default function Dashboard() {
   const renderCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    
-    // Get total days in the month and what day of the week it starts on
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstDayOfMonth = new Date(year, month, 1).getDay();
-
     const days = [];
     const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    // 1. Render Weekday Headers
     weekDays.forEach(day => {
-      days.push(
-        <div key={`header-${day}`} className="text-center text-xs font-bold text-zinc-500 py-2">
-          {day}
-        </div>
-      );
+      days.push(<div key={`header-${day}`} className="text-center text-xs font-bold text-zinc-500 py-2">{day}</div>);
     });
 
-    // 2. Render empty slots for the start of the month
     for (let i = 0; i < firstDayOfMonth; i++) {
       days.push(<div key={`empty-${i}`} className="h-12 sm:h-14"></div>);
     }
 
-    // 3. Render the actual days
     for (let i = 1; i <= daysInMonth; i++) {
-      // Format date to match backend: YYYY-MM-DD safely
       const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-      
-      // Check if this day exists in our activity data array
       const isTrained = activityData.some(d => d.date === dateString && d.count > 0);
       const isToday = new Date().toISOString().split('T')[0] === dateString;
 
       days.push(
-        <div 
-          key={`day-${i}`} 
-          className={`h-12 sm:h-14 flex flex-col items-center justify-center rounded-xl border transition-all duration-300
-            ${isTrained 
-              ? 'bg-orange-950/40 border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.25)]' 
-              : isToday 
-                ? 'bg-zinc-800/80 border-zinc-500' 
-                : 'bg-zinc-900/30 border-zinc-800/50'
-            }
-          `}
-        >
-          {isTrained ? (
-            <span className="text-xl sm:text-2xl animate-pulse filter drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]">
-              🔥
-            </span>
-          ) : (
-            <span className={`text-sm font-bold ${isToday ? 'text-white' : 'text-zinc-600'}`}>
-              {i}
-            </span>
-          )}
+        <div key={`day-${i}`} className={`h-12 sm:h-14 flex flex-col items-center justify-center rounded-xl border transition-all duration-300 ${isTrained ? 'bg-orange-950/40 border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.25)]' : isToday ? 'bg-zinc-800/80 border-zinc-500' : 'bg-zinc-900/30 border-zinc-800/50'}`}>
+          {isTrained ? <span className="text-xl sm:text-2xl animate-pulse filter drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]">🔥</span> : <span className={`text-sm font-bold ${isToday ? 'text-white' : 'text-zinc-600'}`}>{i}</span>}
         </div>
       );
     }
@@ -148,23 +138,43 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* CUSTOM MONTHLY FIRE CALENDAR */}
+        {/* Monthly Fire Calendar */}
         <div className="bg-[#18181b] rounded-3xl p-5 sm:p-6 border border-zinc-800/80 shadow-lg mb-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-sm font-bold text-zinc-400 tracking-wide uppercase">Monthly Streak</h2>
             <div className="flex items-center gap-4 bg-zinc-900 px-4 py-2 rounded-xl border border-zinc-800">
               <button onClick={() => changeMonth(-1)} className="text-zinc-500 hover:text-white font-bold">&lt;</button>
-              <span className="font-bold text-sm w-24 text-center">
-                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-              </span>
+              <span className="font-bold text-sm w-24 text-center">{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</span>
               <button onClick={() => changeMonth(1)} className="text-zinc-500 hover:text-white font-bold">&gt;</button>
             </div>
           </div>
-          
           <div className="grid grid-cols-7 gap-1 sm:gap-2">
             {renderCalendar()}
           </div>
         </div>
+
+        {/* FEATURE 1: True All-Time Weight & Rep Milestone Records */}
+        {prs.length > 0 && (
+          <div className="mb-10">
+            <h2 className="text-sm font-bold text-zinc-400 mb-4 tracking-wide uppercase">Personal Records</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {prs.map((pr, idx) => (
+                <div key={idx} className="bg-[#18181b] border border-zinc-800 rounded-2xl p-4 flex flex-col items-center justify-center shadow-lg transition-all hover:border-zinc-700">
+                  <span className="text-2xl mb-1">🏆</span>
+                  <span className="text-xl font-extrabold text-white text-center">
+                    {pr.weight} <span className="text-xs text-zinc-500 font-bold">KG</span>
+                  </span>
+                  <span className="text-xs font-bold text-zinc-500 tracking-wider text-center mb-2">
+                    FOR {pr.reps} {pr.reps === 1 ? 'REP' : 'REPS'}
+                  </span>
+                  <span className="text-xs font-black text-blue-500 uppercase tracking-widest text-center truncate w-full border-t border-zinc-800/80 pt-2">
+                    {pr.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <h2 className="text-lg font-bold text-zinc-400 mb-4 tracking-wide uppercase">Recent Sessions</h2>
         
@@ -202,16 +212,22 @@ export default function Dashboard() {
                     <div key={i}>
                       <p className="font-bold text-blue-400 mb-2 text-md">{ex.exerciseName}</p>
                       <div className="space-y-1">
-                        <div className="grid grid-cols-3 gap-2 px-2 text-[10px] font-extrabold text-zinc-600 tracking-wider">
+                        {/* FEATURE 2: Expanded grid structure to fit 4-column headers cleanly */}
+                        <div className="grid grid-cols-4 gap-2 px-2 text-[10px] font-extrabold text-zinc-600 tracking-wider">
                           <div>SET</div>
                           <div className="text-center">KG</div>
                           <div className="text-center">REPS</div>
+                          <div className="text-right">EST 1RM</div>
                         </div>
                         {ex.sets.map((set, setIdx) => (
-                          <div key={setIdx} className="grid grid-cols-3 gap-2 px-2 py-1.5 items-center bg-zinc-900/50 rounded-lg">
+                          <div key={setIdx} className="grid grid-cols-4 gap-2 px-2 py-1.5 items-center bg-zinc-900/50 rounded-lg">
                             <div className="text-zinc-400 font-bold text-sm">{setIdx + 1}</div>
                             <div className="text-center font-bold text-zinc-200">{set.weight}</div>
                             <div className="text-center font-bold text-zinc-200">{set.reps}</div>
+                            {/* FEATURE 2: Dynamic inline tracking for every logged set */}
+                            <div className="text-right font-mono text-xs font-extrabold text-blue-400 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10">
+                              {calculate1RM(set.weight, set.reps)} kg
+                            </div>
                           </div>
                         ))}
                       </div>
