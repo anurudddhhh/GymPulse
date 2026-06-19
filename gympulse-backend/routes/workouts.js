@@ -63,6 +63,36 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// @route   GET /api/workouts/activity
+// @desc    Get workout activity dates for the consistency heatmap
+// @access  Private
+router.get('/activity', authMiddleware, async (req, res) => {
+  try {
+    // Only grab the dates to keep the payload extremely lightweight
+    const workouts = await Workout.find({ userId: req.user.userId }).select('date');
+
+    const activityMap = {};
+    
+    // Group workouts by date and count them
+    workouts.forEach(workout => {
+      const dateStr = new Date(workout.date).toISOString().split('T')[0];
+      activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
+    });
+
+    // Format for react-activity-calendar
+    const activityData = Object.keys(activityMap).map(date => {
+      const count = activityMap[date];
+      // Max color intensity level is 4. If they log 4+ workouts in a day, it stays at max intensity.
+      const level = Math.min(count, 4); 
+      return { date, count, level };
+    });
+
+    res.json(activityData);
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error: Could not fetch activity data' });
+  }
+});
+
 
 // @route   GET /api/workouts/history/:exerciseName
 // @desc    Get weight history for a specific exercise to plot on a progress chart
