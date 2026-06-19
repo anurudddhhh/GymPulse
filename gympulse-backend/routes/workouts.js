@@ -63,4 +63,49 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   }
 });
 
+
+// @route   GET /api/workouts/history/:exerciseName
+// @desc    Get weight history for a specific exercise to plot on a progress chart
+// @access  Private
+router.get('/history/:exerciseName', authMiddleware, async (req, res) => {
+  try {
+    const { exerciseName } = req.params;
+
+    // Find all workouts for this user containing the targeted exercise name (case-insensitive)
+    const workouts = await Workout.find({
+      userId: req.user.userId,
+      'exercises.exerciseName': { $regex: new RegExp(`^${exerciseName}$`, 'i') }
+    }).sort({ date: 1 }); // Sort ascending by date to generate a proper historical timeline
+
+    // Map through sessions and pull the heaviest set recorded for each individual day
+    const chartData = workouts.map(workout => {
+      const exercise = workout.exercises.find(
+        ex => ex.exerciseName.toLowerCase() === exerciseName.toLowerCase()
+      );
+
+      let maxWeight = 0;
+      let maxReps = 0;
+      
+      if (exercise && exercise.sets.length > 0) {
+        exercise.sets.forEach(set => {
+          if (set.weight > maxWeight) {
+            maxWeight = set.weight;
+            maxReps = set.reps;
+          }
+        });
+      }
+
+      return {
+        date: new Date(workout.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+        maxWeight,
+        maxReps
+      };
+    });
+
+    res.json(chartData);
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error: Could not fetch exercise history' });
+  }
+});
+
 module.exports = router;

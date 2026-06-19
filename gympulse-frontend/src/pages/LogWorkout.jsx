@@ -1,16 +1,35 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 export default function LogWorkout() {
   const navigate = useNavigate();
   const [workoutName, setWorkoutName] = useState('');
-  const [duration, setDuration] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // NEW: Timer State (in seconds)
+  const [timeElapsed, setTimeElapsed] = useState(0);
   
   const [exercises, setExercises] = useState([
     { exerciseName: '', sets: [{ weight: '', reps: '' }] }
   ]);
+
+  // NEW: Live Stopwatch Logic
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeElapsed((prev) => prev + 1);
+    }, 1000);
+    
+    // Cleanup the interval when the user leaves the page
+    return () => clearInterval(timer);
+  }, []);
+
+  // NEW: Format seconds into MM:SS for the UI
+  const formatTime = (totalSeconds) => {
+    const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${minutes}:${seconds}`;
+  };
 
   const addExercise = () => setExercises([...exercises, { exerciseName: '', sets: [{ weight: '', reps: '' }] }]);
   
@@ -20,7 +39,6 @@ export default function LogWorkout() {
     setExercises(updatedExercises);
   };
 
-  // NEW: Function to remove a specific set
   const removeSet = (exerciseIndex, setIndex) => {
     const updatedExercises = [...exercises];
     updatedExercises[exerciseIndex].sets = updatedExercises[exerciseIndex].sets.filter((_, i) => i !== setIndex);
@@ -43,8 +61,12 @@ export default function LogWorkout() {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
+      
+      // Calculate final duration in minutes (minimum 1 minute)
+      const durationInMinutes = Math.max(1, Math.round(timeElapsed / 60));
+
       await axios.post('http://localhost:5000/api/workouts', 
-        { workoutName, duration, date, exercises },
+        { workoutName, duration: durationInMinutes, date, exercises },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       navigate('/dashboard');
@@ -82,13 +104,13 @@ export default function LogWorkout() {
                 onChange={(e) => setDate(e.target.value)} 
                 className={`${inputClass} text-zinc-300 [color-scheme:dark]`} 
               />
-              <input 
-                type="number" 
-                placeholder="Duration (mins)" 
-                required value={duration} 
-                onChange={(e) => setDuration(e.target.value)} 
-                className={inputClass} 
-              />
+              {/* REPLACED: Manual input is gone. Live Digital Clock is here. */}
+              <div className="bg-[#18181b] rounded-2xl border border-zinc-800 flex items-center justify-center shadow-inner">
+                <span className="text-blue-500 font-mono text-2xl font-extrabold tracking-widest flex items-center gap-2">
+                  <span className="text-zinc-600 text-lg">⏱</span>
+                  {formatTime(timeElapsed)}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -108,7 +130,7 @@ export default function LogWorkout() {
                 <div className="w-4"></div>
                 <div className="flex-1 text-center">KG</div>
                 <div className="flex-1 text-center">REPS</div>
-                <div className="w-8"></div> {/* Spacer for the delete button */}
+                <div className="w-8"></div> 
               </div>
 
               <div className="space-y-2 mb-5">
@@ -122,7 +144,6 @@ export default function LogWorkout() {
                     <input type="number" required value={set.weight} onChange={(e) => handleSetChange(e.target.value, 'weight', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
                     <input type="number" required value={set.reps} onChange={(e) => handleSetChange(e.target.value, 'reps', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
                     
-                    {/* NEW: Delete Set Button */}
                     <button 
                       type="button" 
                       onClick={() => removeSet(exIndex, setIndex)} 
@@ -145,7 +166,6 @@ export default function LogWorkout() {
             + Add Another Exercise
           </button>
 
-          {/* FIX: Removed 'fixed' positioning. This button now naturally flows at the bottom of the page. */}
           <div className="pt-4">
             <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-2xl font-extrabold text-lg shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:bg-blue-500 active:scale-[0.98] transition-all">
               Finish Workout

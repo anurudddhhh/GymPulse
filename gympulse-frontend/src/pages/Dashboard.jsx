@@ -57,11 +57,15 @@ export default function Dashboard() {
           </button>
         </div>
 
-        <div className="mb-8">
-          <Link to="/log-workout" className="block w-full text-center bg-blue-600 text-white py-4 rounded-2xl font-extrabold text-lg shadow-[0_0_20px_rgba(37,99,235,0.2)] hover:bg-blue-500 active:scale-[0.98] transition-all">
-            Start Empty Workout
-          </Link>
-        </div>
+        {/* Action Control Panel */}
+       <div className="grid grid-cols-2 gap-3 mb-8">
+        <Link to="/log-workout" className="text-center bg-blue-600 text-white py-4 rounded-2xl font-extrabold text-lg shadow-[0_0_20px_rgba(37,99,235,0.2)] hover:bg-blue-500 active:scale-[0.98] transition-all">
+          Start Workout
+        </Link>
+        <Link to="/analytics" className="text-center bg-zinc-900 text-zinc-300 border border-zinc-800 py-4 rounded-2xl font-extrabold text-lg hover:bg-zinc-800 active:scale-[0.98] transition-all">
+          View Charts
+        </Link>
+       </div>
 
         <h2 className="text-lg font-bold text-zinc-400 mb-4 tracking-wide uppercase">Recent Sessions</h2>
         
