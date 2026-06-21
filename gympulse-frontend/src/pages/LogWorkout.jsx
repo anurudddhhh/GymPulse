@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 export default function LogWorkout() {
   const navigate = useNavigate();
@@ -59,19 +60,26 @@ export default function LogWorkout() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Start loading toast
+    const toastId = toast.loading('Saving workout...');
+    
     try {
       const token = localStorage.getItem('token');
       
-      // Calculate final duration in minutes (minimum 1 minute)
       const durationInMinutes = Math.max(1, Math.round(timeElapsed / 60));
 
       await axios.post('http://localhost:5000/api/workouts', 
         { workoutName, duration: durationInMinutes, date, exercises },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      
+      // Update toast to success
+      toast.success('Workout logged!', { id: toastId });
       navigate('/dashboard');
     } catch (err) {
-      alert('Failed to save workout');
+      // Update toast to error and remove the ugly alert()
+      toast.error('Failed to save workout', { id: toastId });
       console.error(err);
     }
   };

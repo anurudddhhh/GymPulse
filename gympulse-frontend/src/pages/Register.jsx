@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -10,16 +11,25 @@ export default function Register() {
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    const toastId = toast.loading('Creating your account...');
+    
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/register', formData);
-      localStorage.setItem('token', res.data.token);
-      navigate('/dashboard');
+      // FIX: Send the entire formData object to the backend
+      await axios.post('http://localhost:5000/api/auth/register', formData);
+      
+      toast.success('Account created successfully! Please log in.', { id: toastId });
+      navigate('/login');
     } catch (err) {
-      alert(err.response?.data?.message || 'Registration failed');
+      console.log("Registration Error:", err); // Helpful for debugging
+      const errorMsg = err.response?.data?.message || 'Registration failed. Try again.';
+      toast.error(errorMsg, { id: toastId });
     }
   };
+
 
   const inputClass = "w-full bg-[#27272a] rounded-2xl px-5 py-4 text-lg font-medium placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all border border-transparent focus:border-blue-500";
 

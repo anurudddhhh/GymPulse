@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 export default function Dashboard() {
   const [workouts, setWorkouts] = useState([]);
@@ -59,18 +60,27 @@ export default function Dashboard() {
     return r === 1 ? w : Math.round(w * (1 + r / 30));
   };
 
-  const handleDelete = async (id) => {
+const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this workout?')) return;
+    
+    // Start a loading toast
+    const toastId = toast.loading('Deleting workout...');
+
     try {
       const token = localStorage.getItem('token');
       await axios.delete(`http://localhost:5000/api/workouts/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
       setWorkouts(workouts.filter(workout => workout._id !== id));
       fetchActivity();
       fetchPRs();
+      
+      // Update the toast to success
+      toast.success('Workout deleted successfully!', { id: toastId });
     } catch (err) {
-      alert('Failed to delete workout');
+      // Update the toast to error
+      toast.error('Failed to delete workout', { id: toastId });
     }
   };
 

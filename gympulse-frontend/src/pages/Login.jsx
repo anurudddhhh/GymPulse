@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -10,15 +11,22 @@ export default function Login() {
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', formData);
-      localStorage.setItem('token', res.data.token);
-      navigate('/dashboard');
-    } catch (err) {
-      alert(err.response?.data?.message || 'Login failed');
-    }
-  };
+  e.preventDefault();
+  
+  const toastId = toast.loading('Logging you in...');
+  
+  try {
+    const res = await axios.post('http://localhost:5000/api/auth/login', formData);
+    localStorage.setItem('token', res.data.token);
+    
+    toast.success('Welcome back!', { id: toastId });
+    navigate('/dashboard');
+  } catch (err) {
+    console.log("The error is:",err)
+    const errorMsg = err.response?.data?.message || 'Login failed. Please check your credentials.';
+    toast.error(errorMsg, { id: toastId });
+  }
+};
 
   // Shared styling for all inputs to keep code clean
   const inputClass = "w-full bg-[#27272a] rounded-2xl px-5 py-4 text-lg font-medium placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all border border-transparent focus:border-blue-500";
