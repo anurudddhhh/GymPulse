@@ -41,4 +41,24 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
+// @route   DELETE /api/templates/:id
+// @desc    Delete a custom user template
+// @access  Private
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const template = await Template.findOneAndDelete({ 
+      _id: req.params.id, 
+      userId: req.user.userId 
+    });
+    
+    if (!template) {
+      return res.status(404).json({ message: 'Template not found or unauthorized' });
+    }
+    
+    res.json({ message: 'Template deleted' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error: Could not delete template' });
+  }
+});
+
 module.exports = router;

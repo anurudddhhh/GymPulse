@@ -16,6 +16,7 @@ export default function LogWorkout() {
   // NEW: State for Database Data
   const [dbExercises, setDbExercises] = useState([]);
   const [dbTemplates, setDbTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
   // Fetch Exercises and Templates on Mount
   useEffect(() => {
@@ -60,10 +61,9 @@ export default function LogWorkout() {
     const seconds = (totalSeconds % 60).toString().padStart(2, '0');
     return `${minutes}:${seconds}`;
   };
-
-  // NEW: Apply Template Logic
   const handleApplyTemplate = (e) => {
     const templateId = e.target.value;
+    setSelectedTemplateId(templateId); // Keep it selected in the dropdown
     if (!templateId) return;
 
     const selectedTemplate = dbTemplates.find(t => t._id === templateId);
@@ -71,24 +71,42 @@ export default function LogWorkout() {
 
     setWorkoutName(selectedTemplate.templateName);
     
-    
-    // Map the blueprint sets into actual live sets
     const mappedExercises = selectedTemplate.exercises.map(ex => {
       const generatedSets = Array.from({ length: ex.defaultSets }).map(() => ({
         weight: '',
-        reps: '' // <--- Changed from ex.defaultReps to an empty string
+        reps: ''
       }));
       return { exerciseName: ex.exerciseName, sets: generatedSets };
     });
 
     setExercises(mappedExercises);
     toast.success(`${selectedTemplate.templateName} loaded!`);
-    
-    // Reset dropdown back to default
-    e.target.value = "";
+  };
+
+  const handleDeleteTemplate = async () => {
+    if (!selectedTemplateId) return;
+    const toastId = toast.loading('Deleting template...');
+
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`http://localhost:5000/api/templates/${selectedTemplateId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setDbTemplates(dbTemplates.filter(t => t._id !== selectedTemplateId));
+      setSelectedTemplateId(''); // Reset dropdown
+      toast.success('Template deleted!', { id: toastId });
+    } catch (err) {
+      toast.error('Failed to delete template', { id: toastId });
+      console.error(err);
+    }
   };
 
   const addExercise = () => setExercises([...exercises, { exerciseName: '', sets: [{ weight: '', reps: '' }] }]);
+  const removeExercise = (exerciseIndex) => {
+    const updatedExercises = exercises.filter((_, i) => i !== exerciseIndex);
+    setExercises(updatedExercises);
+  };
   
   const addSet = (exerciseIndex) => {
     const updatedExercises = [...exercises];
@@ -214,18 +232,31 @@ export default function LogWorkout() {
         {dbTemplates.length > 0 && (
           <div className="mb-6 bg-blue-900/20 border border-blue-500/30 rounded-2xl p-4">
             <label className="text-xs font-bold text-blue-400 tracking-wider uppercase mb-2 block">Quick Start Template</label>
-            <select 
-              onChange={handleApplyTemplate}
-              defaultValue=""
-              className="w-full bg-[#18181b] rounded-xl px-4 py-3 text-white font-bold border border-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-            >
-              <option value="" disabled>Select a routine to auto-fill...</option>
-              {dbTemplates.map(t => (
-                <option key={t._id} value={t._id}>
-                  {t.isSystemTemplate ? '⭐ ' : ''}{t.templateName}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select 
+                value={selectedTemplateId}
+                onChange={handleApplyTemplate}
+                className="w-full bg-[#18181b] rounded-xl px-4 py-3 text-white font-bold border border-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+              >
+                <option value="" disabled>Select a routine to auto-fill...</option>
+                {dbTemplates.map(t => (
+                  <option key={t._id} value={t._id}>
+                    {t.isSystemTemplate ? '⭐ ' : ''}{t.templateName}
+                  </option>
+                ))}
+              </select>
+
+              {selectedTemplateId && !dbTemplates.find(t => t._id === selectedTemplateId)?.isSystemTemplate && (
+                <button 
+                  type="button" 
+                  onClick={handleDeleteTemplate}
+                  className="bg-red-500/10 text-red-500 border border-red-500/20 px-4 rounded-xl font-bold hover:bg-red-500/20 transition-all flex items-center justify-center"
+                  title="Delete Custom Template"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -255,13 +286,24 @@ export default function LogWorkout() {
           </div>
 
           {exercises.map((exercise, exIndex) => (
-            <div key={exIndex} className="bg-[#18181b] rounded-3xl p-5 border border-zinc-800/80 shadow-lg">
+            <div key={exIndex} className="bg-[#18181b] rounded-3xl p-5 border border-zinc-800/80 shadow-lg relative">
+              
+              {/* NEW: Remove Exercise Button */}
+              {exercises.length > 1 && (
+                <button 
+                  type="button" 
+                  onClick={() => removeExercise(exIndex)}
+                  className="absolute top-5 right-5 text-xs font-bold text-zinc-500 hover:text-red-500 bg-zinc-800/50 hover:bg-red-500/10 px-3 py-1.5 rounded-lg transition-colors z-10"
+                >
+                  ✕ Remove Exercise
+                </button>
+              )}
               
               {/* REPLACED: Strict Dropdown instead of Text Input */}
               <select
                 value={exercise.exerciseName}
                 onChange={(e) => handleExerciseChange(e.target.value, exIndex)}
-                className="w-full bg-transparent text-blue-400 text-lg font-bold focus:outline-none mb-6 border-b border-zinc-800 pb-2 appearance-none"
+                className="w-full bg-transparent text-blue-400 text-lg font-bold focus:outline-none mb-6 border-b border-zinc-800 pb-2 appearance-none pr-32"
               >
                 <option value="" disabled>Choose an exercise...</option>
                 {Object.keys(dbExercises).map(category => (
@@ -291,8 +333,8 @@ export default function LogWorkout() {
                     </div>
                     <div className="w-4 text-center text-zinc-600 text-sm font-medium">-</div>
                     
-                    <input type="number"  value={set.weight} onChange={(e) => handleSetChange(e.target.value, 'weight', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
-                    <input type="number"  value={set.reps} onChange={(e) => handleSetChange(e.target.value, 'reps', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                    <input type="number" value={set.weight} onChange={(e) => handleSetChange(e.target.value, 'weight', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                    <input type="number" value={set.reps} onChange={(e) => handleSetChange(e.target.value, 'reps', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
                     
                     <button 
                       type="button" 
