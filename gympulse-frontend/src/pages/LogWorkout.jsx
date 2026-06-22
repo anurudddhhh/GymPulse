@@ -7,29 +7,85 @@ export default function LogWorkout() {
   const navigate = useNavigate();
   const [workoutName, setWorkoutName] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  
-  // NEW: Timer State (in seconds)
   const [timeElapsed, setTimeElapsed] = useState(0);
   
   const [exercises, setExercises] = useState([
     { exerciseName: '', sets: [{ weight: '', reps: '' }] }
   ]);
 
-  // NEW: Live Stopwatch Logic
+  // NEW: State for Database Data
+  const [dbExercises, setDbExercises] = useState([]);
+  const [dbTemplates, setDbTemplates] = useState([]);
+
+  // Fetch Exercises and Templates on Mount
+  useEffect(() => {
+    const fetchLibraryData = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const config = { headers: { Authorization: `Bearer ${token}` } };
+        
+        const [exerciseRes, templateRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/exercises', config),
+          axios.get('http://localhost:5000/api/templates', config)
+        ]);
+        
+        // Group exercises by category for a cleaner dropdown
+        const grouped = exerciseRes.data.reduce((acc, curr) => {
+          if (!acc[curr.category]) acc[curr.category] = [];
+          acc[curr.category].push(curr);
+          return acc;
+        }, {});
+        
+        setDbExercises(grouped);
+        setDbTemplates(templateRes.data);
+      } catch (err) {
+        toast.error('Failed to load exercise library');
+        console.error(err);
+      }
+    };
+
+    fetchLibraryData();
+  }, []);
+
+  // Live Stopwatch Logic
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeElapsed((prev) => prev + 1);
     }, 1000);
-    
-    // Cleanup the interval when the user leaves the page
     return () => clearInterval(timer);
   }, []);
 
-  // NEW: Format seconds into MM:SS for the UI
   const formatTime = (totalSeconds) => {
     const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
     const seconds = (totalSeconds % 60).toString().padStart(2, '0');
     return `${minutes}:${seconds}`;
+  };
+
+  // NEW: Apply Template Logic
+  const handleApplyTemplate = (e) => {
+    const templateId = e.target.value;
+    if (!templateId) return;
+
+    const selectedTemplate = dbTemplates.find(t => t._id === templateId);
+    if (!selectedTemplate) return;
+
+    setWorkoutName(selectedTemplate.templateName);
+    
+    
+    // Map the blueprint sets into actual live sets
+    const mappedExercises = selectedTemplate.exercises.map(ex => {
+      const generatedSets = Array.from({ length: ex.defaultSets }).map(() => ({
+        weight: '',
+        reps: '' // <--- Changed from ex.defaultReps to an empty string
+      }));
+      return { exerciseName: ex.exerciseName, sets: generatedSets };
+    });
+
+    setExercises(mappedExercises);
+    toast.success(`${selectedTemplate.templateName} loaded!`);
+    
+    // Reset dropdown back to default
+    e.target.value = "";
   };
 
   const addExercise = () => setExercises([...exercises, { exerciseName: '', sets: [{ weight: '', reps: '' }] }]);
@@ -46,9 +102,9 @@ export default function LogWorkout() {
     setExercises(updatedExercises);
   };
 
-  const handleExerciseChange = (text, exerciseIndex) => {
+  const handleExerciseChange = (value, exerciseIndex) => {
     const updatedExercises = [...exercises];
-    updatedExercises[exerciseIndex].exerciseName = text;
+    updatedExercises[exerciseIndex].exerciseName = value;
     setExercises(updatedExercises);
   };
 
@@ -58,27 +114,85 @@ export default function LogWorkout() {
     setExercises(updatedExercises);
   };
 
-  const handleSubmit = async (e) => {
+  // NEW: Save current setup as a Custom Template
+  const handleSaveAsTemplate = async () => {
+    if (!workoutName.trim()) {
+      toast.error('Please enter a Workout Name first to save it as a template.');
+      return;
+    }
+
+    const validExercises = exercises.filter(ex => ex.exerciseName);
+    if (validExercises.length === 0) {
+      toast.error('Add at least one exercise to save a template.');
+      return;
+    }
+
+    const toastId = toast.loading('Saving custom template...');
+
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Format the current live exercises into blueprint rules
+      const templateExercises = validExercises.map(ex => ({
+        exerciseName: ex.exerciseName,
+        defaultSets: ex.sets.length || 3,
+        // Grab the reps from the first set as a baseline, default to 10 if blank
+        defaultReps: ex.sets.length > 0 ? Number(ex.sets[0].reps) || 10 : 10 
+      }));
+
+      const res = await axios.post('http://localhost:5000/api/templates', 
+        { templateName: workoutName, exercises: templateExercises },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Instantly add the new custom template to the dropdown so you see it right away!
+      setDbTemplates([...dbTemplates, res.data]);
+      
+      toast.success(`Template "${workoutName}" saved successfully!`, { id: toastId });
+    } catch (err) {
+      toast.error('Failed to save template', { id: toastId });
+      console.error(err);
+    }
+  };
+
+ const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Start loading toast
+    // STRICT SANITIZATION: Prevent Mongoose crashes
+    const cleanedExercises = exercises
+      .map(ex => {
+        // Only keep sets where BOTH weight and reps have values
+        const validSets = ex.sets
+          .filter(set => set.weight !== '' && set.reps !== '')
+          .map(set => ({
+            weight: Number(set.weight), // Force string to Number for MongoDB
+            reps: Number(set.reps)      // Force string to Number for MongoDB
+          }));
+        
+        return { ...ex, sets: validSets };
+      })
+      // Keep only exercises that have a name AND at least one completely valid set
+      .filter(ex => ex.exerciseName !== '' && ex.sets.length > 0);
+
+    if (cleanedExercises.length === 0) {
+      toast.error('You need to log at least one complete set to finish the workout!');
+      return;
+    }
+
     const toastId = toast.loading('Saving workout...');
     
     try {
       const token = localStorage.getItem('token');
-      
       const durationInMinutes = Math.max(1, Math.round(timeElapsed / 60));
 
       await axios.post('http://localhost:5000/api/workouts', 
-        { workoutName, duration: durationInMinutes, date, exercises },
+        { workoutName, duration: durationInMinutes, date, exercises: cleanedExercises },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      // Update toast to success
       toast.success('Workout logged!', { id: toastId });
       navigate('/dashboard');
     } catch (err) {
-      // Update toast to error and remove the ugly alert()
       toast.error('Failed to save workout', { id: toastId });
       console.error(err);
     }
@@ -96,6 +210,25 @@ export default function LogWorkout() {
           </button>
         </div>
 
+        {/* NEW: Blueprint Loader */}
+        {dbTemplates.length > 0 && (
+          <div className="mb-6 bg-blue-900/20 border border-blue-500/30 rounded-2xl p-4">
+            <label className="text-xs font-bold text-blue-400 tracking-wider uppercase mb-2 block">Quick Start Template</label>
+            <select 
+              onChange={handleApplyTemplate}
+              defaultValue=""
+              className="w-full bg-[#18181b] rounded-xl px-4 py-3 text-white font-bold border border-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+            >
+              <option value="" disabled>Select a routine to auto-fill...</option>
+              {dbTemplates.map(t => (
+                <option key={t._id} value={t._id}>
+                  {t.isSystemTemplate ? '⭐ ' : ''}{t.templateName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-3">
             <input 
@@ -112,7 +245,6 @@ export default function LogWorkout() {
                 onChange={(e) => setDate(e.target.value)} 
                 className={`${inputClass} text-zinc-300 [color-scheme:dark]`} 
               />
-              {/* REPLACED: Manual input is gone. Live Digital Clock is here. */}
               <div className="bg-[#18181b] rounded-2xl border border-zinc-800 flex items-center justify-center shadow-inner">
                 <span className="text-blue-500 font-mono text-2xl font-extrabold tracking-widest flex items-center gap-2">
                   <span className="text-zinc-600 text-lg">⏱</span>
@@ -124,14 +256,24 @@ export default function LogWorkout() {
 
           {exercises.map((exercise, exIndex) => (
             <div key={exIndex} className="bg-[#18181b] rounded-3xl p-5 border border-zinc-800/80 shadow-lg">
-              <input 
-                type="text" 
-                placeholder="Exercise Name" 
-                required 
-                value={exercise.exerciseName} 
-                onChange={(e) => handleExerciseChange(e.target.value, exIndex)} 
-                className="w-full bg-transparent text-blue-400 text-lg font-bold placeholder-blue-900/50 focus:outline-none mb-6 border-b border-zinc-800 pb-2" 
-              />
+              
+              {/* REPLACED: Strict Dropdown instead of Text Input */}
+              <select
+                value={exercise.exerciseName}
+                onChange={(e) => handleExerciseChange(e.target.value, exIndex)}
+                className="w-full bg-transparent text-blue-400 text-lg font-bold focus:outline-none mb-6 border-b border-zinc-800 pb-2 appearance-none"
+              >
+                <option value="" disabled>Choose an exercise...</option>
+                {Object.keys(dbExercises).map(category => (
+                  <optgroup key={category} label={`--- ${category.toUpperCase()} ---`} className="bg-[#27272a] text-zinc-400 font-bold">
+                    {dbExercises[category].map(ex => (
+                      <option key={ex._id} value={ex.name} className="text-white bg-[#18181b]">
+                        {ex.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
               
               <div className="flex gap-3 px-2 mb-2 text-xs font-bold text-zinc-500 tracking-wider">
                 <div className="w-10 text-center">SET</div>
@@ -149,8 +291,8 @@ export default function LogWorkout() {
                     </div>
                     <div className="w-4 text-center text-zinc-600 text-sm font-medium">-</div>
                     
-                    <input type="number" required value={set.weight} onChange={(e) => handleSetChange(e.target.value, 'weight', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
-                    <input type="number" required value={set.reps} onChange={(e) => handleSetChange(e.target.value, 'reps', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                    <input type="number"  value={set.weight} onChange={(e) => handleSetChange(e.target.value, 'weight', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                    <input type="number"  value={set.reps} onChange={(e) => handleSetChange(e.target.value, 'reps', exIndex, setIndex)} className="flex-1 min-w-0 bg-[#27272a] text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
                     
                     <button 
                       type="button" 
@@ -174,9 +316,18 @@ export default function LogWorkout() {
             + Add Another Exercise
           </button>
 
-          <div className="pt-4">
+          <div className="pt-4 space-y-3">
             <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-2xl font-extrabold text-lg shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:bg-blue-500 active:scale-[0.98] transition-all">
-              Finish Workout
+              Finish & Log Workout
+            </button>
+
+            {/* NEW: Custom Template Button */}
+            <button 
+              type="button" 
+              onClick={handleSaveAsTemplate} 
+              className="w-full bg-zinc-800 text-zinc-300 py-3 rounded-2xl font-bold text-md hover:bg-zinc-700 hover:text-white transition-all border border-zinc-700"
+            >
+              💾 Save Current Setup as Custom Template
             </button>
           </div>
         </form>
