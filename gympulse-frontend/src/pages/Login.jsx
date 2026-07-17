@@ -20,7 +20,7 @@ export default function Login() {
     localStorage.setItem('token', res.data.token);
     
     toast.success('Welcome back!', { id: toastId });
-    navigate('/dashboard');
+    navigate('/app/workout');
   } catch (err) {
     console.log("The error is:",err)
     const errorMsg = err.response?.data?.message || 'Login failed. Please check your credentials.';

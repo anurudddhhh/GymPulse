@@ -191,4 +191,25 @@ router.get('/prs', authMiddleware, async (req, res) => {
   }
 });
 
+// @route   GET /api/workouts/last/:workoutName
+// @desc    Get the most recent workout by template/workout name to auto-fill reps/weights
+// @access  Private
+router.get('/last/:workoutName', authMiddleware, async (req, res) => {
+  try {
+    const { workoutName } = req.params;
+    const lastWorkout = await Workout.findOne({ 
+      userId: req.user.userId,
+      workoutName: { $regex: new RegExp(`^${workoutName}$`, 'i') }
+    }).sort({ date: -1 });
+
+    if (!lastWorkout) {
+      return res.status(404).json({ message: 'No previous workout found' });
+    }
+
+    res.json(lastWorkout);
+  } catch (err) {
+    res.status(500).json({ message: 'Server Error: Could not fetch last workout' });
+  }
+});
+
 module.exports = router;

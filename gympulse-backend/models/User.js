@@ -11,6 +11,17 @@ const UserSchema = new mongoose.Schema({
   fitnessGoal: { 
     type: String, 
     enum: ['Muscle Gain', 'Fat Loss', 'Strength', 'General Fitness'] 
+  },
+  profilePicture: { type: String, default: '' }, // Cloudinary secure URL
+  cloudinaryPublicId: { type: String, default: '' }, // For deletion of old avatars
+  targetCalories: { type: Number },
+  targetProtein: { type: Number },
+  targetCarbs: { type: Number },
+  targetFats: { type: Number },
+  unitPreference: { 
+    type: String, 
+    enum: ['kg', 'lbs'], 
+    default: 'kg' 
   }
 }, { timestamps: true });
 

@@ -66,9 +66,7 @@ export default function Analytics() {
         
         <div className="flex justify-between items-center mb-8 pt-4">
           <div>
-            <Link to="/dashboard" className="text-sm font-bold text-blue-500 hover:text-blue-400 transition-colors">
-              ← Back to Dashboard
-            </Link>
+            <Link to="/app/history" className="text-sm font-bold text-blue-500 hover:text-blue-400 transition-colors">&larr; Back to History</Link>
             <h1 className="text-3xl font-extrabold tracking-tight mt-2">Progress Visualizer</h1>
           </div>
         </div>
