@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
+import { Link } from 'react-router-dom';
+import api from '../api';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 export default function Analytics() {
-  const navigate = useNavigate();
   const [exercisesList, setExercisesList] = useState([]);
   const [selectedExercise, setSelectedExercise] = useState('');
   const [chartData, setChartData] = useState([]);
@@ -21,10 +20,7 @@ export default function Analytics() {
 
   const fetchUniqueExercises = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/workouts', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/workouts');
       
       const names = new Set();
       res.data.forEach(workout => {
@@ -50,10 +46,7 @@ export default function Analytics() {
 
   const fetchExerciseHistory = async (name) => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`http://localhost:5000/api/workouts/history/${encodeURIComponent(name)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get(`/api/workouts/history/${encodeURIComponent(name)}`);
       setChartData(res.data);
     } catch (err) {
       console.error("Failed to fetch chart data", err);

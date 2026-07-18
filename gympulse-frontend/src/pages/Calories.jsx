@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../api';
 import toast from 'react-hot-toast';
 import { 
   ChevronLeft, ChevronRight, UploadCloud, X, Trash2, 
@@ -38,10 +38,7 @@ export default function Calories() {
 
   const fetchTargets = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/users/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/users/me');
       
       if (!res.data.targetCalories) {
         setShowSetup(true);
@@ -61,13 +58,12 @@ export default function Calories() {
   const handleSaveSetup = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      await axios.put('http://localhost:5000/api/users/me', {
+      await api.put('/api/users/me', {
         targetCalories: setupData.calories,
         targetProtein: setupData.protein,
         targetCarbs: setupData.carbs,
         targetFats: setupData.fats
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      });
       
       setUserTargets(setupData);
       setShowSetup(false);
@@ -81,10 +77,7 @@ export default function Calories() {
     setLoading(true);
     const dateStr = dateObj.toISOString().split('T')[0];
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`http://localhost:5000/api/nutrition/${dateStr}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get(`/api/nutrition/${dateStr}`);
       setNutritionData(res.data);
     } catch (err) {
       console.error('Failed to fetch nutrition data', err);
@@ -141,10 +134,8 @@ export default function Calories() {
       formData.append('image', selectedFile);
       if (description) formData.append('description', description);
 
-      const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:5000/api/nutrition/analyze', formData, {
+      const res = await api.post('/api/nutrition/analyze', formData, {
         headers: { 
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
         }
       });
@@ -170,11 +161,10 @@ export default function Calories() {
     const dateStr = currentDate.toISOString().split('T')[0];
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:5000/api/nutrition', {
+      const res = await api.post('/api/nutrition', {
         date: dateStr,
         ...verificationData
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      });
 
       setNutritionData(res.data);
       setShowVerification(false);
@@ -191,10 +181,7 @@ export default function Calories() {
     const toastId = toast.loading('Deleting...');
     const dateStr = currentDate.toISOString().split('T')[0];
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.delete(`http://localhost:5000/api/nutrition/${dateStr}/${mealId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.delete(`/api/nutrition/${dateStr}/${mealId}`);
       setNutritionData(res.data.log);
       toast.success('Deleted', { id: toastId });
     } catch (err) {

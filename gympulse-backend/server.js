@@ -36,7 +36,6 @@ mongoose.connect(process.env.MONGODB_URI)
   .catch((err) => console.log('MongoDB Connection Error: ', err));
 
 // Route Middleware
-app.use('/api/auth', require('./routes/auth'));
 app.use('/api/workouts', require('./routes/workouts'));
 app.use('/api/exercises', require('./routes/exercises'));
 app.use('/api/templates', require('./routes/templates'));

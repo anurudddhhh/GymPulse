@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import toast from 'react-hot-toast';
 import {
   Trophy, Dumbbell, Trash2, Clock, Activity, BarChart3
@@ -17,10 +17,7 @@ export default function History() {
 
   const fetchWorkouts = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/workouts', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/workouts');
       setWorkouts(res.data);
     } catch (err) {
       console.error('Failed to fetch workouts', err);
@@ -29,10 +26,7 @@ export default function History() {
 
   const fetchPRs = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/workouts/prs', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/workouts/prs');
       setPrs(res.data);
     } catch (err) {
       console.error('Failed to fetch PRs', err);
@@ -51,10 +45,7 @@ export default function History() {
     const toastId = toast.loading('Deleting workout...');
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/workouts/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/api/workouts/${id}`);
 
       setWorkouts(workouts.filter(workout => workout._id !== id));
       fetchPRs();

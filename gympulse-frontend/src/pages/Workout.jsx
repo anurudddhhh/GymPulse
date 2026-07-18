@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import toast from 'react-hot-toast';
 import {
   Clock, X, Plus, Save, Star, Trash2, Play, Dumbbell
 } from 'lucide-react';
 
 export default function Workout() {
-  const navigate = useNavigate();
   const [workoutName, setWorkoutName] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [timeElapsed, setTimeElapsed] = useState(0);
@@ -26,12 +24,9 @@ export default function Workout() {
   useEffect(() => {
     const fetchLibraryData = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const config = { headers: { Authorization: `Bearer ${token}` } };
-
         const [exerciseRes, templateRes] = await Promise.all([
-          axios.get('http://localhost:5000/api/exercises', config),
-          axios.get('http://localhost:5000/api/templates', config)
+          api.get('/api/exercises'),
+          api.get('/api/templates')
         ]);
 
         // Group exercises by category for a cleaner dropdown
@@ -76,10 +71,7 @@ export default function Workout() {
       
       let lastWorkoutExercises = null;
       try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get(`http://localhost:5000/api/workouts/last/${encodeURIComponent(selectedTemplate.templateName)}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await api.get(`/api/workouts/last/${encodeURIComponent(selectedTemplate.templateName)}`);
         lastWorkoutExercises = res.data.exercises;
       } catch (err) {
         // It's totally fine if they haven't done this workout before
@@ -120,10 +112,7 @@ export default function Workout() {
     const toastId = toast.loading('Deleting template...');
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/templates/${templateId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/api/templates/${templateId}`);
 
       setDbTemplates(dbTemplates.filter(t => t._id !== templateId));
       toast.success('Template deleted!', { id: toastId });
@@ -179,8 +168,6 @@ export default function Workout() {
     const toastId = toast.loading('Saving custom template...');
 
     try {
-      const token = localStorage.getItem('token');
-
       // Format the current live exercises into blueprint rules
       const templateExercises = validExercises.map(ex => ({
         exerciseName: ex.exerciseName,
@@ -189,9 +176,8 @@ export default function Workout() {
         defaultReps: ex.sets.length > 0 ? Number(ex.sets[0].reps) || 10 : 10
       }));
 
-      const res = await axios.post('http://localhost:5000/api/templates',
-        { templateName: workoutName, exercises: templateExercises },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await api.post('/api/templates',
+        { templateName: workoutName, exercises: templateExercises }
       );
 
       // Instantly add the new custom template to the list
@@ -231,12 +217,10 @@ export default function Workout() {
     const toastId = toast.loading('Saving workout...');
 
     try {
-      const token = localStorage.getItem('token');
       const durationInMinutes = Math.max(1, Math.round(timeElapsed / 60));
 
-      await axios.post('http://localhost:5000/api/workouts',
-        { workoutName, duration: durationInMinutes, date, exercises: cleanedExercises },
-        { headers: { Authorization: `Bearer ${token}` } }
+      await api.post('/api/workouts',
+        { workoutName, duration: durationInMinutes, date, exercises: cleanedExercises }
       );
 
       toast.success('Workout logged!', { id: toastId });

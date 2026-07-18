@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
+import { Link } from 'react-router-dom';
+import { useClerk } from '@clerk/clerk-react';
+import api from '../api';
 import toast from 'react-hot-toast';
 
 export default function Dashboard() {
@@ -8,7 +9,7 @@ export default function Dashboard() {
   const [activityData, setActivityData] = useState([]);
   const [prs, setPrs] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const navigate = useNavigate();
+  const { signOut } = useClerk();
 
   useEffect(() => {
     fetchWorkouts();
@@ -18,10 +19,7 @@ export default function Dashboard() {
 
   const fetchWorkouts = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/workouts', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/workouts');
       setWorkouts(res.data);
     } catch (err) {
       if (err.response?.status === 401) handleLogout(); 
@@ -30,10 +28,7 @@ export default function Dashboard() {
 
   const fetchActivity = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/workouts/activity', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/workouts/activity');
       setActivityData(res.data);
     } catch (err) {
       console.error("Failed to fetch activity data", err);
@@ -42,10 +37,7 @@ export default function Dashboard() {
 
   const fetchPRs = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/workouts/prs', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/workouts/prs');
       setPrs(res.data);
     } catch (err) {
       console.error("Failed to fetch PRs", err);
@@ -61,32 +53,23 @@ export default function Dashboard() {
   };
 
 const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this workout?')) return;
-    
-    // Start a loading toast
     const toastId = toast.loading('Deleting workout...');
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/workouts/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/api/workouts/${id}`);
       
       setWorkouts(workouts.filter(workout => workout._id !== id));
       fetchActivity();
       fetchPRs();
       
-      // Update the toast to success
       toast.success('Workout deleted successfully!', { id: toastId });
     } catch (err) {
-      // Update the toast to error
       toast.error('Failed to delete workout', { id: toastId });
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
+    signOut({ redirectUrl: '/sign-in' });
   };
 
   const changeMonth = (offset) => {

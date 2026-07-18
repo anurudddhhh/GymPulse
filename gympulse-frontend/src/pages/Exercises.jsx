@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 import toast from 'react-hot-toast';
 import { 
   Search as SearchIcon, ChevronDown, ChevronRight, 
@@ -34,10 +34,7 @@ export default function Exercises() {
 
   const fetchExercises = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/exercises', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/exercises');
       setExercises(res.data);
     } catch (err) {
       console.error('Failed to fetch exercises', err);
@@ -55,10 +52,8 @@ export default function Exercises() {
     const toastId = toast.loading('Adding exercise...');
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:5000/api/exercises', 
-        { name: newExName.trim(), category: newExCategory },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await api.post('/api/exercises', 
+        { name: newExName.trim(), category: newExCategory }
       );
       
       setExercises([...exercises, res.data]);
@@ -74,15 +69,10 @@ export default function Exercises() {
 
   const handleDeleteExercise = async (id, e) => {
     e.stopPropagation(); // Prevent accordion toggle
-    
-    if (!window.confirm("Are you sure you want to delete this custom exercise?")) return;
 
     const toastId = toast.loading('Deleting...');
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/exercises/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/api/exercises/${id}`);
       setExercises(exercises.filter(ex => ex._id !== id));
       if (expandedExId === id) setExpandedExId(null);
       toast.success('Deleted', { id: toastId });
@@ -103,10 +93,7 @@ export default function Exercises() {
     if (!exHistory[ex._id]) {
       setHistoryLoading(true);
       try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get(`http://localhost:5000/api/workouts/history/${encodeURIComponent(ex.name)}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await api.get(`/api/workouts/history/${encodeURIComponent(ex.name)}`);
         setExHistory(prev => ({ ...prev, [ex._id]: res.data }));
       } catch (err) {
         toast.error(`Failed to load history for ${ex.name}`);

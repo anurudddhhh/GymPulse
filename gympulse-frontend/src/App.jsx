@@ -1,7 +1,10 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { SignedIn, SignedOut, useAuth } from '@clerk/clerk-react';
 import { Toaster } from 'react-hot-toast';
-import Register from './pages/Register';
+import { useEffect } from 'react';
+import { setTokenGetter } from './api';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import AppLayout from './components/AppLayout';
 import Profile from './pages/Profile';
 import History from './pages/History';
@@ -10,15 +13,43 @@ import Exercises from './pages/Exercises';
 import Calories from './pages/Calories';
 import Analytics from './pages/Analytics';
 
-// Protects routes from users who aren't logged in
-const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
-  return token ? children : <Navigate to="/login" />;
-};
+// Initializes the centralized Axios token getter from Clerk's auth hook
+function ClerkTokenBridge() {
+  const { getToken } = useAuth();
+
+  useEffect(() => {
+    setTokenGetter(() => getToken());
+  }, [getToken]);
+
+  return null;
+}
+
+// Redirects signed-out users to the sign-in page
+function RequireAuth({ children }) {
+  return (
+    <>
+      <SignedIn>{children}</SignedIn>
+      <SignedOut><Navigate to="/sign-in" replace /></SignedOut>
+    </>
+  );
+}
+
+// Redirects signed-in users away from auth pages
+function PublicOnly({ children }) {
+  return (
+    <>
+      <SignedIn><Navigate to="/app/workout" replace /></SignedIn>
+      <SignedOut>{children}</SignedOut>
+    </>
+  );
+}
 
 function App() {
   return (
     <Router>
+      {/* Clerk token bridge -- must be inside Router and ClerkProvider */}
+      <ClerkTokenBridge />
+
       {/* Global Toaster configured for the dark theme */}
       <Toaster
         position="top-center"
@@ -42,17 +73,17 @@ function App() {
       />
 
       <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<Register />} />
-        <Route path="/login" element={<Login />} />
+        {/* Public Auth Routes */}
+        <Route path="/sign-in/*" element={<PublicOnly><Login /></PublicOnly>} />
+        <Route path="/sign-up/*" element={<PublicOnly><Register /></PublicOnly>} />
 
         {/* Protected App Shell with 5-Tab Navigation */}
         <Route
           path="/app"
           element={
-            <ProtectedRoute>
+            <RequireAuth>
               <AppLayout />
-            </ProtectedRoute>
+            </RequireAuth>
           }
         >
           <Route index element={<Navigate to="/app/workout" replace />} />
@@ -64,8 +95,16 @@ function App() {
           <Route path="analytics" element={<Analytics />} />
         </Route>
 
+        {/* Root redirects based on auth state */}
+        <Route path="/" element={
+          <>
+            <SignedIn><Navigate to="/app/workout" replace /></SignedIn>
+            <SignedOut><Navigate to="/sign-in" replace /></SignedOut>
+          </>
+        } />
+
         {/* Catch-all redirect */}
-        <Route path="*" element={<Navigate to="/app/workout" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { useClerk } from '@clerk/clerk-react';
+import api from '../api';
 import toast from 'react-hot-toast';
 import {
   UserCircle, Camera, Settings, LogOut, Flame, Mail,
@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 export default function Profile() {
-  const navigate = useNavigate();
+  const { signOut } = useClerk();
   const fileInputRef = useRef(null);
 
   const [user, setUser] = useState(null);
@@ -24,10 +24,7 @@ export default function Profile() {
 
   const fetchProfile = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/users/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/users/me');
       setUser(res.data);
     } catch (err) {
       if (err.response?.status === 401) handleLogout();
@@ -39,10 +36,7 @@ export default function Profile() {
 
   const fetchActivity = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/workouts/activity', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/api/workouts/activity');
       setActivityData(res.data);
     } catch (err) {
       console.error('Failed to fetch activity data', err);
@@ -67,13 +61,11 @@ export default function Profile() {
     const toastId = toast.loading('Uploading avatar...');
 
     try {
-      const token = localStorage.getItem('token');
       const formData = new FormData();
       formData.append('avatar', file);
 
-      const res = await axios.post('http://localhost:5000/api/users/me/avatar', formData, {
+      const res = await api.post('/api/users/me/avatar', formData, {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
         }
       });
@@ -94,10 +86,8 @@ export default function Profile() {
     if (user?.unitPreference === unit) return;
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.put('http://localhost:5000/api/users/me',
-        { unitPreference: unit },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await api.put('/api/users/me',
+        { unitPreference: unit }
       );
       setUser(res.data);
       toast.success(`Units switched to ${unit.toUpperCase()}`);
@@ -107,8 +97,7 @@ export default function Profile() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
+    signOut({ redirectUrl: '/sign-in' });
   };
 
   const changeMonth = (offset) => {

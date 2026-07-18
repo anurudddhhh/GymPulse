@@ -1,73 +1,153 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
-import toast from 'react-hot-toast';
+import { SignIn } from '@clerk/clerk-react';
 
-export default function Login() {
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate();
-
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  const toastId = toast.loading('Logging you in...');
-  
-  try {
-    const res = await axios.post('http://localhost:5000/api/auth/login', formData);
-    localStorage.setItem('token', res.data.token);
-    
-    toast.success('Welcome back!', { id: toastId });
-    navigate('/app/workout');
-  } catch (err) {
-    console.log("The error is:",err)
-    const errorMsg = err.response?.data?.message || 'Login failed. Please check your credentials.';
-    toast.error(errorMsg, { id: toastId });
-  }
+// GymPulse dark-mode appearance overrides for Clerk's pre-built SignIn component.
+// Matches our zinc/slate/black aesthetic with flat, premium styling.
+const clerkAppearance = {
+  layout: {
+    socialButtonsPlacement: 'top',
+    socialButtonsVariant: 'blockButton',
+    termsPageUrl: null,
+    privacyPageUrl: null,
+  },
+  variables: {
+    colorPrimary: '#3b82f6',
+    colorBackground: '#18181b',
+    colorText: '#ffffff',
+    colorTextSecondary: '#a1a1aa',
+    colorInputBackground: '#27272a',
+    colorInputText: '#ffffff',
+    colorTextOnPrimaryBackground: '#ffffff',
+    borderRadius: '0.5rem',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fontWeight: { normal: 500, medium: 600, bold: 700 },
+  },
+  elements: {
+    rootBox: {
+      width: '100%',
+      maxWidth: '420px',
+    },
+    card: {
+      backgroundColor: '#18181b',
+      border: '1px solid #27272a',
+      borderRadius: '0.75rem',
+      boxShadow: 'none',
+    },
+    headerTitle: {
+      color: '#ffffff',
+      fontWeight: 700,
+      fontSize: '1.5rem',
+      letterSpacing: '-0.025em',
+    },
+    headerSubtitle: {
+      color: '#71717a',
+      fontWeight: 500,
+    },
+    socialButtonsBlockButton: {
+      backgroundColor: '#27272a',
+      border: '1px solid #3f3f46',
+      color: '#ffffff',
+      fontWeight: 600,
+      borderRadius: '0.5rem',
+      transition: 'all 150ms ease',
+      '&:hover': {
+        backgroundColor: '#3f3f46',
+        borderColor: '#52525b',
+      },
+    },
+    dividerLine: {
+      backgroundColor: '#27272a',
+    },
+    dividerText: {
+      color: '#71717a',
+    },
+    formFieldLabel: {
+      color: '#a1a1aa',
+      fontWeight: 500,
+    },
+    formFieldInput: {
+      backgroundColor: '#27272a',
+      border: '1px solid transparent',
+      color: '#ffffff',
+      borderRadius: '0.5rem',
+      fontWeight: 500,
+      '&:focus': {
+        borderColor: '#3b82f6',
+        boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.25)',
+      },
+      '&::placeholder': {
+        color: '#71717a',
+      },
+    },
+    formButtonPrimary: {
+      backgroundColor: '#3b82f6',
+      color: '#ffffff',
+      fontWeight: 700,
+      borderRadius: '0.5rem',
+      boxShadow: 'none',
+      transition: 'all 150ms ease',
+      '&:hover': {
+        backgroundColor: '#2563eb',
+      },
+    },
+    footerAction: {
+      '& a': {
+        color: '#3b82f6',
+        fontWeight: 600,
+        '&:hover': {
+          color: '#60a5fa',
+        },
+      },
+    },
+    footerActionText: {
+      color: '#71717a',
+    },
+    identityPreview: {
+      backgroundColor: '#27272a',
+      border: '1px solid #3f3f46',
+      borderRadius: '0.5rem',
+    },
+    identityPreviewEditButton: {
+      color: '#3b82f6',
+    },
+    formFieldSuccessText: {
+      color: '#22c55e',
+    },
+    formFieldErrorText: {
+      color: '#ef4444',
+    },
+    alert: {
+      backgroundColor: '#27272a',
+      border: '1px solid #3f3f46',
+      borderRadius: '0.5rem',
+      color: '#ffffff',
+    },
+    alertText: {
+      color: '#ffffff',
+    },
+    otpCodeFieldInput: {
+      backgroundColor: '#27272a',
+      border: '1px solid #3f3f46',
+      color: '#ffffff',
+      borderRadius: '0.5rem',
+    },
+  },
 };
 
-  // Shared styling for all inputs to keep code clean
-  const inputClass = "w-full bg-[#27272a] rounded-2xl px-5 py-4 text-lg font-medium placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all border border-transparent focus:border-blue-500";
-
+export default function Login() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-[#09090b] text-white p-4 font-sans">
-      <div className="w-full max-w-md bg-[#18181b] rounded-3xl p-8 border border-zinc-800/80 shadow-2xl">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-extrabold tracking-tight">Welcome Back</h2>
-          <p className="text-zinc-500 font-medium mt-2">Log in to GymPulse to continue.</p>
+      <div className="w-full max-w-md">
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-extrabold tracking-tight">Welcome to GymPulse</h1>
+          <p className="text-zinc-500 font-medium mt-2">Sign in to continue tracking your progress.</p>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input type="email" name="email" placeholder="Email" onChange={handleChange} required className={inputClass} />
-
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              placeholder="Password"
-              onChange={handleChange}
-              required
-              className={`${inputClass} pr-20`}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-5 top-[18px] text-zinc-500 hover:text-white text-sm font-extrabold transition-colors tracking-wide"
-            >
-              {showPassword ? "HIDE" : "SHOW"}
-            </button>
-          </div>
-
-          <button type="submit" className="w-full mt-2 bg-blue-600 text-white py-4 rounded-2xl font-extrabold text-lg shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:bg-blue-500 active:scale-[0.98] transition-all">
-            Log In
-          </button>
-        </form>
-
-        <p className="mt-8 text-center text-zinc-500 font-medium">
-          Don't have an account? <Link to="/" className="text-blue-500 hover:text-blue-400 transition-colors">Register</Link>
-        </p>
+        <SignIn
+          appearance={clerkAppearance}
+          routing="path"
+          path="/sign-in"
+          signUpUrl="/sign-up"
+          forceRedirectUrl="/app/workout"
+        />
       </div>
     </div>
   );
