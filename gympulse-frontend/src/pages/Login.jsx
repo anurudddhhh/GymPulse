@@ -1,7 +1,6 @@
 import { SignIn } from '@clerk/clerk-react';
 
-// GymPulse dark-mode appearance overrides for Clerk's pre-built SignIn component.
-// Matches our zinc/slate/black aesthetic with flat, premium styling.
+// GymPulse minimalist dark-slate appearance overrides for Clerk SignIn
 const clerkAppearance = {
   layout: {
     socialButtonsPlacement: 'top',
@@ -11,14 +10,14 @@ const clerkAppearance = {
   },
   variables: {
     colorPrimary: '#3b82f6',
-    colorBackground: '#18181b',
-    colorText: '#ffffff',
-    colorTextSecondary: '#a1a1aa',
-    colorInputBackground: '#27272a',
-    colorInputText: '#ffffff',
+    colorBackground: '#181a1f',
+    colorText: '#f4f5f7',
+    colorTextSecondary: '#9499a6',
+    colorInputBackground: '#21232a',
+    colorInputText: '#f4f5f7',
     colorTextOnPrimaryBackground: '#ffffff',
-    borderRadius: '0.5rem',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
+    borderRadius: '0.75rem',
+    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
     fontWeight: { normal: 500, medium: 600, bold: 700 },
   },
   elements: {
@@ -27,63 +26,66 @@ const clerkAppearance = {
       maxWidth: '420px',
     },
     card: {
-      backgroundColor: '#18181b',
-      border: '1px solid #27272a',
-      borderRadius: '0.75rem',
-      boxShadow: 'none',
+      backgroundColor: '#181a1f',
+      border: '1px solid #272a33',
+      borderRadius: '1.25rem',
+      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4)',
     },
     headerTitle: {
-      color: '#ffffff',
-      fontWeight: 700,
+      color: '#f4f5f7',
+      fontWeight: 800,
       fontSize: '1.5rem',
       letterSpacing: '-0.025em',
     },
     headerSubtitle: {
-      color: '#71717a',
+      color: '#9499a6',
       fontWeight: 500,
     },
     socialButtonsBlockButton: {
-      backgroundColor: '#27272a',
-      border: '1px solid #3f3f46',
-      color: '#ffffff',
+      backgroundColor: '#21232a',
+      border: '1px solid #272a33',
+      color: '#f4f5f7',
       fontWeight: 600,
-      borderRadius: '0.5rem',
+      borderRadius: '0.75rem',
       transition: 'all 150ms ease',
       '&:hover': {
-        backgroundColor: '#3f3f46',
-        borderColor: '#52525b',
+        backgroundColor: '#292c35',
+        borderColor: '#363a45',
       },
     },
     dividerLine: {
-      backgroundColor: '#27272a',
+      backgroundColor: '#272a33',
     },
     dividerText: {
-      color: '#71717a',
+      color: '#606573',
+      fontSize: '0.75rem',
+      fontWeight: 600,
     },
     formFieldLabel: {
-      color: '#a1a1aa',
-      fontWeight: 500,
+      color: '#9499a6',
+      fontWeight: 600,
+      fontSize: '0.8rem',
     },
     formFieldInput: {
-      backgroundColor: '#27272a',
-      border: '1px solid transparent',
-      color: '#ffffff',
-      borderRadius: '0.5rem',
+      backgroundColor: '#21232a',
+      border: '1px solid #272a33',
+      color: '#f4f5f7',
+      borderRadius: '0.75rem',
       fontWeight: 500,
       '&:focus': {
         borderColor: '#3b82f6',
-        boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.25)',
+        boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.2)',
       },
       '&::placeholder': {
-        color: '#71717a',
+        color: '#606573',
       },
     },
     formButtonPrimary: {
       backgroundColor: '#3b82f6',
       color: '#ffffff',
       fontWeight: 700,
-      borderRadius: '0.5rem',
-      boxShadow: 'none',
+      borderRadius: '0.75rem',
+      boxShadow: '0 0 15px rgba(59, 130, 246, 0.25)',
       transition: 'all 150ms ease',
       '&:hover': {
         backgroundColor: '#2563eb',
@@ -99,47 +101,47 @@ const clerkAppearance = {
       },
     },
     footerActionText: {
-      color: '#71717a',
+      color: '#9499a6',
     },
     identityPreview: {
-      backgroundColor: '#27272a',
-      border: '1px solid #3f3f46',
-      borderRadius: '0.5rem',
+      backgroundColor: '#21232a',
+      border: '1px solid #272a33',
+      borderRadius: '0.75rem',
     },
     identityPreviewEditButton: {
       color: '#3b82f6',
     },
     formFieldSuccessText: {
-      color: '#22c55e',
+      color: '#10b981',
     },
     formFieldErrorText: {
-      color: '#ef4444',
+      color: '#f43f5e',
     },
     alert: {
-      backgroundColor: '#27272a',
-      border: '1px solid #3f3f46',
-      borderRadius: '0.5rem',
-      color: '#ffffff',
+      backgroundColor: '#21232a',
+      border: '1px solid #272a33',
+      borderRadius: '0.75rem',
+      color: '#f4f5f7',
     },
     alertText: {
-      color: '#ffffff',
+      color: '#f4f5f7',
     },
     otpCodeFieldInput: {
-      backgroundColor: '#27272a',
-      border: '1px solid #3f3f46',
-      color: '#ffffff',
-      borderRadius: '0.5rem',
+      backgroundColor: '#21232a',
+      border: '1px solid #272a33',
+      color: '#f4f5f7',
+      borderRadius: '0.75rem',
     },
   },
 };
 
 export default function Login() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-[#09090b] text-white p-4 font-sans">
+    <div className="flex items-center justify-center min-h-screen bg-bg-base text-text-main p-4 font-sans">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <h1 className="text-3xl font-extrabold tracking-tight">Welcome to GymPulse</h1>
-          <p className="text-zinc-500 font-medium mt-2">Sign in to continue tracking your progress.</p>
+          <p className="text-text-muted font-medium mt-2 text-sm">Sign in to continue tracking your workouts and nutrition.</p>
         </div>
         <SignIn
           appearance={clerkAppearance}

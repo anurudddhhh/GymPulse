@@ -1,10 +1,11 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { SignedIn, SignedOut, useAuth } from '@clerk/clerk-react';
 import { Toaster } from 'react-hot-toast';
 import { useEffect } from 'react';
 import { setTokenGetter } from './api';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Onboarding from './pages/Onboarding';
 import AppLayout from './components/AppLayout';
 import Profile from './pages/Profile';
 import History from './pages/History';
@@ -47,27 +48,28 @@ function PublicOnly({ children }) {
 function App() {
   return (
     <Router>
-      {/* Clerk token bridge -- must be inside Router and ClerkProvider */}
+      {/* Clerk token bridge */}
       <ClerkTokenBridge />
 
-      {/* Global Toaster configured for the dark theme */}
+      {/* Global Toaster with Minimalist Slate Styling */}
       <Toaster
         position="top-center"
         toastOptions={{
           style: {
-            background: '#18181b',
-            color: '#fff',
-            border: '1px solid #27272a',
-            borderRadius: '12px',
-            fontWeight: 'bold',
-            fontSize: '14px',
+            background: '#181a1f',
+            color: '#f4f5f7',
+            border: '1px solid #272a33',
+            borderRadius: '14px',
+            fontWeight: 600,
+            fontSize: '13px',
             fontFamily: 'system-ui, sans-serif',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4)',
           },
           success: {
-            iconTheme: { primary: '#3b82f6', secondary: '#fff' },
+            iconTheme: { primary: '#3b82f6', secondary: '#ffffff' },
           },
           error: {
-            iconTheme: { primary: '#ef4444', secondary: '#fff' },
+            iconTheme: { primary: '#f43f5e', secondary: '#ffffff' },
           },
         }}
       />
@@ -76,6 +78,16 @@ function App() {
         {/* Public Auth Routes */}
         <Route path="/sign-in/*" element={<PublicOnly><Login /></PublicOnly>} />
         <Route path="/sign-up/*" element={<PublicOnly><Register /></PublicOnly>} />
+
+        {/* Onboarding Wizard Routes (standalone & nested support) */}
+        <Route
+          path="/onboarding"
+          element={
+            <RequireAuth>
+              <Onboarding />
+            </RequireAuth>
+          }
+        />
 
         {/* Protected App Shell with 5-Tab Navigation */}
         <Route
@@ -87,6 +99,7 @@ function App() {
           }
         >
           <Route index element={<Navigate to="/app/workout" replace />} />
+          <Route path="onboarding" element={<Onboarding />} />
           <Route path="profile" element={<Profile />} />
           <Route path="history" element={<History />} />
           <Route path="workout" element={<Workout />} />

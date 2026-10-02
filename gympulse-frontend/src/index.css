@@ -1,12 +1,67 @@
 @import "tailwindcss";
 
 @theme {
-  --color-dark: #121212;
-  --color-card: #1E1E1E;
-  --color-primary: #3B82F6;
-  --color-accent: #10B981;
+  /* Classy Charcoal + Champagne Palette */
+  --color-bg-base: #0F0F10;
+  --color-bg-surface: #171718;
+  --color-bg-elevated: #1F1F21;
+  --color-bg-subtle: #2A2A2C;
+
+  /* Borders — almost invisible */
+  --color-border-subtle: #2A2A2C;
+  --color-border-focus: #C4A574;
+
+  /* Warm typography */
+  --color-text-main: #F2F0ED;
+  --color-text-muted: #9C9A96;
+  --color-text-dim: #6B6B69;
+
+  /* Accents */
+  --color-brand: #C4A574;
+  --color-brand-hover: #B8956A;
+  --color-accent-emerald: #7D9B8A;
+  --color-accent-amber: #C4A574;
+  --color-accent-rose: #C4787A;
 }
 
-body {
-  @apply bg-dark text-white min-h-screen font-sans;
+@layer base {
+  body {
+    background-color: #0F0F10;
+    color: #F2F0ED;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Hide number input spinners */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}
+
+/* Minimal scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0F0F10;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2A2A2C;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3A3A3C;
 }
