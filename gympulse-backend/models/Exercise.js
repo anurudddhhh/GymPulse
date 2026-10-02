@@ -15,6 +15,19 @@ const ExerciseSchema = new mongoose.Schema({
     ],
     required: true
   },
+  description: {
+    type: String,
+    default: ''
+  },
+  primaryMuscles: [{
+    type: String
+  }],
+  secondaryMuscles: [{
+    type: String
+  }],
+  formCues: [{
+    type: String
+  }],
   isCustom: {
     type: Boolean,
     default: false
@@ -28,8 +41,7 @@ const ExerciseSchema = new mongoose.Schema({
   }
 });
 
-// Ensure a user cannot create multiple custom exercises with the exact same name
-// (System exercises will have a null userId)
+// Compound unique index ensuring a user cannot duplicate exercise names in their own custom scope
 ExerciseSchema.index({ name: 1, userId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Exercise', ExerciseSchema);

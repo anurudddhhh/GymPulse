@@ -12,7 +12,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Multer memory storage -- no temp files on disk, 5MB limit
+// Multer memory storage -- 5MB limit
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -39,11 +39,15 @@ router.get('/me', authMiddleware, async (req, res) => {
 });
 
 // @route   PUT /api/users/me
-// @desc    Update profile settings (name, age, gender, weight, height, fitnessGoal, unitPreference)
+// @desc    Update profile settings
 // @access  Private
 router.put('/me', authMiddleware, async (req, res) => {
   try {
-    const allowedFields = ['name', 'age', 'gender', 'weight', 'height', 'fitnessGoal', 'unitPreference', 'targetCalories', 'targetProtein', 'targetCarbs', 'targetFats'];
+    const allowedFields = [
+      'name', 'age', 'gender', 'weight', 'height', 
+      'fitnessGoal', 'unitPreference', 'targetCalories', 
+      'targetProtein', 'targetCarbs', 'targetFats'
+    ];
     const updates = {};
 
     allowedFields.forEach(field => {
@@ -66,13 +70,12 @@ router.put('/me', authMiddleware, async (req, res) => {
 });
 
 // @route   POST /api/users/me/avatar
-// @desc    Upload a profile picture to Cloudinary
+// @desc    Upload or update profile picture on Cloudinary
 // @access  Private
 router.post('/me/avatar', authMiddleware, upload.single('avatar'), async (req, res) => {
   try {
-    // Check if Cloudinary is configured
     if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      return res.status(503).json({ message: 'Cloudinary is not configured. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET to your .env file.' });
+      return res.status(503).json({ message: 'Cloudinary credentials missing' });
     }
 
     if (!req.file) {
@@ -82,7 +85,7 @@ router.post('/me/avatar', authMiddleware, upload.single('avatar'), async (req, r
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Delete old avatar from Cloudinary if one exists
+    // Delete existing avatar from Cloudinary if present
     if (user.cloudinaryPublicId) {
       try {
         await cloudinary.uploader.destroy(user.cloudinaryPublicId);
@@ -91,7 +94,7 @@ router.post('/me/avatar', authMiddleware, upload.single('avatar'), async (req, r
       }
     }
 
-    // Upload new avatar using stream (pipe buffer directly, no temp file)
+    // Upload new avatar stream
     const uploadResult = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
@@ -109,7 +112,6 @@ router.post('/me/avatar', authMiddleware, upload.single('avatar'), async (req, r
       stream.end(req.file.buffer);
     });
 
-    // Save the Cloudinary URL and public_id to the user document
     user.profilePicture = uploadResult.secure_url;
     user.cloudinaryPublicId = uploadResult.public_id;
     await user.save();
@@ -121,6 +123,34 @@ router.post('/me/avatar', authMiddleware, upload.single('avatar'), async (req, r
   } catch (err) {
     console.error('Avatar upload error:', err);
     res.status(500).json({ message: 'Server error: Could not upload avatar' });
+  }
+});
+
+// @route   DELETE /api/users/me/avatar
+// @desc    Remove profile picture (Task #22 Backend)
+// @access  Private
+router.delete('/me/avatar', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Remove from Cloudinary if public ID exists
+    if (user.cloudinaryPublicId) {
+      try {
+        await cloudinary.uploader.destroy(user.cloudinaryPublicId);
+      } catch (deleteErr) {
+        console.error('Failed to destroy Cloudinary image:', deleteErr);
+      }
+    }
+
+    user.profilePicture = '';
+    user.cloudinaryPublicId = '';
+    await user.save();
+
+    res.json({ message: 'Avatar removed successfully', profilePicture: '' });
+  } catch (err) {
+    console.error('Avatar deletion error:', err);
+    res.status(500).json({ message: 'Server error: Could not remove avatar' });
   }
 });
 

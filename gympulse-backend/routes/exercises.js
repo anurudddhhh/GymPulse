@@ -21,15 +21,26 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // @route   POST /api/exercises
-// @desc    Create a custom exercise for the user
+// @desc    Create a custom exercise for the user (with rich guide fields)
 // @access  Private
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { name, category } = req.body;
+    const { 
+      name, 
+      category, 
+      description, 
+      primaryMuscles, 
+      secondaryMuscles, 
+      formCues 
+    } = req.body;
     
     const newExercise = new Exercise({
       name,
       category,
+      description: description || '',
+      primaryMuscles: Array.isArray(primaryMuscles) ? primaryMuscles : [],
+      secondaryMuscles: Array.isArray(secondaryMuscles) ? secondaryMuscles : [],
+      formCues: Array.isArray(formCues) ? formCues : [],
       isCustom: true,
       userId: req.user.userId
     });

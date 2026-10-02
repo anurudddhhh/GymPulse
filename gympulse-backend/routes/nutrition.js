@@ -1,18 +1,36 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const cloudinary = require('cloudinary').v2;
 const { GoogleGenAI } = require('@google/genai');
 const Nutrition = require('../models/Nutrition');
 const authMiddleware = require('../middleware/auth');
 
-// Multer config for image upload
+// Multer: 5MB max, memory only (serverless-friendly)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-// Helper to wrap cloudinary upload stream
+// Gemini / AI scan limiter — protects quota from spam & accidental loops
+const aiScanLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,                   // 5 analyze calls per window per user
+  standardHeaders: true,    // RateLimit-* headers
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Prefer authenticated user id; fall back to IP
+    return req.user?.userId || req.ip || 'anonymous';
+  },
+  handler: (req, res) => {
+    res.status(429).json({
+      message:
+        'AI scan limit reached. You can analyze up to 5 meals every 15 minutes. Please try again later.',
+    });
+  },
+});
+
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
@@ -27,30 +45,31 @@ const uploadToCloudinary = (buffer) => {
 };
 
 // @route   POST /api/nutrition/analyze
-// @desc    Analyze meal image using Gemini AI and return estimated macros
+// @desc    Gemini meal analysis (rate-limited) → Cloudinary only if food
 // @access  Private
-router.post('/analyze', authMiddleware, upload.single('image'), async (req, res) => {
-  try {
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(503).json({ message: 'GEMINI_API_KEY is missing from environment variables' });
-    }
+router.post(
+  '/analyze',
+  authMiddleware,
+  aiScanLimiter,
+  upload.single('image'),
+  async (req, res) => {
+    try {
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(503).json({
+          message: 'GEMINI_API_KEY is missing from environment variables',
+        });
+      }
 
-    if (!req.file) {
-      return res.status(400).json({ message: 'No image provided' });
-    }
+      if (!req.file) {
+        return res.status(400).json({ message: 'No image provided' });
+      }
 
-    const { description } = req.body;
+      const { description } = req.body;
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-    // 1. Upload to Cloudinary to get persistent URL for the feed
-    const uploadResult = await uploadToCloudinary(req.file.buffer);
-    const imageUrl = uploadResult.secure_url;
-
-    // 2. Call Gemini API
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    
-    const prompt = `You are an objective, scientific nutrition analyzer. Analyze the provided image and text description ("${description || 'None provided'}").
+      const prompt = `You are an objective, scientific nutrition analyzer. Analyze the provided image and text description ("${description || 'None provided'}").
 First, determine if the image contains food or drink. 
-If the image DOES NOT contain food/drink (e.g., it is a laptop, a dog, a car, or an empty plate), you must return exactly this JSON:
+If the image DOES NOT contain food/drink (e.g., it is a laptop, a dog, a car, a shoe, or an empty room), you must return exactly this JSON:
 {
   "isFood": false,
   "message": "Please upload a relevant image of a meal or food item."
@@ -65,58 +84,111 @@ If the image DOES contain food, estimate the macronutrients strictly based on th
   "fats": number
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        prompt,
-        {
-          inlineData: {
-            data: req.file.buffer.toString('base64'),
-            mimeType: req.file.mimetype
-          }
-        }
-      ],
-      config: {
-        responseMimeType: 'application/json'
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          prompt,
+          {
+            inlineData: {
+              data: req.file.buffer.toString('base64'),
+              mimeType: req.file.mimetype,
+            },
+          },
+        ],
+        config: {
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const jsonString = response.text.trim();
+      const result = JSON.parse(jsonString);
+
+      if (result.isFood === false) {
+        return res.status(400).json({ message: result.message });
       }
-    });
 
-    const jsonString = response.text.trim();
-    const result = JSON.parse(jsonString);
+      // Only upload to Cloudinary after Gemini confirms food
+      const uploadResult = await uploadToCloudinary(req.file.buffer);
+      const imageUrl = uploadResult.secure_url;
 
-    if (result.isFood === false) {
-      return res.status(400).json({ message: result.message });
+      res.json({
+        estimatedMacros: {
+          name: result.name,
+          calories: result.calories,
+          protein: result.protein,
+          carbs: result.carbs,
+          fats: result.fats,
+        },
+        imageUrl,
+      });
+    } catch (err) {
+      console.error('AI Analysis Error:', err);
+      res.status(500).json({ message: 'Failed to analyze meal. Please try again.' });
+    }
+  }
+);
+
+// @route   GET /api/nutrition/week/:date
+// @desc    7-day nutrition summary ending on :date
+// @access  Private
+router.get('/week/:date', authMiddleware, async (req, res) => {
+  try {
+    const { date } = req.params;
+    const anchorDate = new Date(date + 'T00:00:00Z');
+    const dates = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(anchorDate);
+      d.setUTCDate(d.getUTCDate() - i);
+      dates.push(d.toISOString().split('T')[0]);
     }
 
-    res.json({
-      estimatedMacros: {
-        name: result.name,
-        calories: result.calories,
-        protein: result.protein,
-        carbs: result.carbs,
-        fats: result.fats
-      },
-      imageUrl
+    const logs = await Nutrition.find({
+      userId: req.user.userId,
+      date: { $in: dates },
     });
 
+    const logMap = {};
+    logs.forEach((log) => {
+      const totals = log.meals.reduce(
+        (acc, m) => ({
+          calories: acc.calories + (m.calories || 0),
+          protein: acc.protein + (m.protein || 0),
+          carbs: acc.carbs + (m.carbs || 0),
+          fats: acc.fats + (m.fats || 0),
+        }),
+        { calories: 0, protein: 0, carbs: 0, fats: 0 }
+      );
+      logMap[log.date] = totals;
+    });
+
+    const weeklySummary = dates.map((dStr) => {
+      const totals = logMap[dStr] || {
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fats: 0,
+      };
+      const dayName = new Date(dStr + 'T00:00:00Z').toLocaleDateString('en-US', {
+        weekday: 'short',
+        timeZone: 'UTC',
+      });
+      return { date: dStr, day: dayName, ...totals };
+    });
+
+    res.json(weeklySummary);
   } catch (err) {
-    console.error('AI Analysis Error:', err);
-    res.status(500).json({ message: 'Failed to analyze meal. Please try again.' });
+    console.error('Weekly summary fetch error:', err);
+    res.status(500).json({ message: 'Server Error: Could not fetch weekly summary' });
   }
 });
 
 // @route   GET /api/nutrition/:date
-// @desc    Get nutrition log for a specific date (YYYY-MM-DD)
-// @access  Private
 router.get('/:date', authMiddleware, async (req, res) => {
   try {
     const { date } = req.params;
     let log = await Nutrition.findOne({ userId: req.user.userId, date });
-    
-    if (!log) {
-      log = { date, meals: [] };
-    }
-    
+    if (!log) log = { date, meals: [] };
     res.json(log);
   } catch (err) {
     res.status(500).json({ message: 'Server Error: Could not fetch nutrition data' });
@@ -124,21 +196,19 @@ router.get('/:date', authMiddleware, async (req, res) => {
 });
 
 // @route   POST /api/nutrition
-// @desc    Add a meal item to a specific date's log
-// @access  Private
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { date, name, description, imageUrl, calories, protein, carbs, fats } = req.body;
-    
-    let log = await Nutrition.findOne({ userId: req.user.userId, date });
+    const { date, name, description, imageUrl, calories, protein, carbs, fats } =
+      req.body;
 
+    let log = await Nutrition.findOne({ userId: req.user.userId, date });
     const newMeal = { name, description, imageUrl, calories, protein, carbs, fats };
 
     if (!log) {
       log = new Nutrition({
         userId: req.user.userId,
         date,
-        meals: [newMeal]
+        meals: [newMeal],
       });
     } else {
       log.meals.push(newMeal);
@@ -152,8 +222,6 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // @route   DELETE /api/nutrition/:date/:mealId
-// @desc    Delete a specific meal item
-// @access  Private
 router.delete('/:date/:mealId', authMiddleware, async (req, res) => {
   try {
     const { date, mealId } = req.params;
@@ -163,7 +231,7 @@ router.delete('/:date/:mealId', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: 'Nutrition log not found' });
     }
 
-    log.meals = log.meals.filter(meal => meal._id.toString() !== mealId);
+    log.meals = log.meals.filter((meal) => meal._id.toString() !== mealId);
     await log.save();
 
     res.json({ message: 'Meal deleted successfully', log });
