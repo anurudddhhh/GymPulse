@@ -7,26 +7,22 @@ const { GoogleGenAI } = require('@google/genai');
 const Nutrition = require('../models/Nutrition');
 const authMiddleware = require('../middleware/auth');
 
-// Multer: 5MB max, memory only (serverless-friendly)
+// Multer: 5MB max, memory storage only
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-// Gemini / AI scan limiter — protects quota from spam & accidental loops
+// Gemini AI scan limiter — 5 calls per 15 minutes per user
 const aiScanLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,                   // 5 analyze calls per window per user
-  standardHeaders: true,    // RateLimit-* headers
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Prefer authenticated user id; fall back to IP
-    return req.user?.userId || req.ip || 'anonymous';
-  },
+  keyGenerator: (req) => req.user?.userId || req.ip || 'anonymous',
   handler: (req, res) => {
     res.status(429).json({
-      message:
-        'AI scan limit reached. You can analyze up to 5 meals every 15 minutes. Please try again later.',
+      message: 'AI scan limit reached. You can analyze up to 5 meals every 15 minutes. Please try again later.',
     });
   },
 });
@@ -45,7 +41,7 @@ const uploadToCloudinary = (buffer) => {
 };
 
 // @route   POST /api/nutrition/analyze
-// @desc    Gemini meal analysis (rate-limited) → Cloudinary only if food
+// @desc    Multimodal AI meal analysis (Image, Text Description, or Both)
 // @access  Private
 router.post(
   '/analyze',
@@ -60,21 +56,28 @@ router.post(
         });
       }
 
-      if (!req.file) {
-        return res.status(400).json({ message: 'No image provided' });
+      const description = req.body.description ? req.body.description.trim() : '';
+
+      // Guardrail: Require AT LEAST an image OR a text description
+      if (!req.file && !description) {
+        return res.status(400).json({
+          message: 'Please provide an image, a meal description, or both.',
+        });
       }
 
-      const { description } = req.body;
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      let contents = [];
 
-      const prompt = `You are an objective, scientific nutrition analyzer. Analyze the provided image and text description ("${description || 'None provided'}").
-First, determine if the image contains food or drink. 
-If the image DOES NOT contain food/drink (e.g., it is a laptop, a dog, a car, a shoe, or an empty room), you must return exactly this JSON:
+      if (req.file && description) {
+        // Mode 1: Image + Text Description
+        const prompt = `You are an objective, scientific nutrition analyzer. Analyze the provided image and text description ("${description}").
+First, determine if the image or description represents food or drink.
+If it DOES NOT represent food/drink, return exactly this JSON:
 {
   "isFood": false,
-  "message": "Please upload a relevant image of a meal or food item."
+  "message": "Please provide a valid image or description of a meal."
 }
-If the image DOES contain food, estimate the macronutrients strictly based on the image and provided description. Do not apply any dietary biases. Return exactly this JSON:
+If it DOES represent food, estimate the macronutrients strictly based on the image and provided context. Return exactly this JSON:
 {
   "isFood": true,
   "name": "Short 3-5 word summary of meal",
@@ -83,10 +86,7 @@ If the image DOES contain food, estimate the macronutrients strictly based on th
   "carbs": number,
   "fats": number
 }`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
+        contents = [
           prompt,
           {
             inlineData: {
@@ -94,7 +94,58 @@ If the image DOES contain food, estimate the macronutrients strictly based on th
               mimeType: req.file.mimetype,
             },
           },
-        ],
+        ];
+      } else if (req.file) {
+        // Mode 2: Image Only
+        const prompt = `You are an objective, scientific nutrition analyzer. Analyze the provided image.
+First, determine if the image contains food or drink.
+If the image DOES NOT contain food/drink, return exactly this JSON:
+{
+  "isFood": false,
+  "message": "Please upload an image of a meal or food item."
+}
+If the image DOES contain food, estimate the macronutrients strictly based on the image. Return exactly this JSON:
+{
+  "isFood": true,
+  "name": "Short 3-5 word summary of meal",
+  "calories": number,
+  "protein": number,
+  "carbs": number,
+  "fats": number
+}`;
+        contents = [
+          prompt,
+          {
+            inlineData: {
+              data: req.file.buffer.toString('base64'),
+              mimeType: req.file.mimetype,
+            },
+          },
+        ];
+      } else {
+        // Mode 3: Text Description Only
+        const prompt = `You are an objective, scientific nutrition analyzer. Estimate the macronutrients strictly based on this text description: "${description}".
+First, determine if the description represents food or drink.
+If the description DOES NOT represent food/drink (e.g., "a red car", "laptop", "random gibberish"), return exactly this JSON:
+{
+  "isFood": false,
+  "message": "Please describe a valid meal or food item."
+}
+If the description DOES represent food, estimate the macronutrients accurately based on standard nutritional data. Return exactly this JSON:
+{
+  "isFood": true,
+  "name": "Short 3-5 word summary of meal",
+  "calories": number,
+  "protein": number,
+  "carbs": number,
+  "fats": number
+}`;
+        contents = [prompt];
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents,
         config: {
           responseMimeType: 'application/json',
         },
@@ -107,9 +158,12 @@ If the image DOES contain food, estimate the macronutrients strictly based on th
         return res.status(400).json({ message: result.message });
       }
 
-      // Only upload to Cloudinary after Gemini confirms food
-      const uploadResult = await uploadToCloudinary(req.file.buffer);
-      const imageUrl = uploadResult.secure_url;
+      // Upload to Cloudinary ONLY if an image file was provided
+      let imageUrl = '';
+      if (req.file) {
+        const uploadResult = await uploadToCloudinary(req.file.buffer);
+        imageUrl = uploadResult.secure_url;
+      }
 
       res.json({
         estimatedMacros: {
@@ -163,12 +217,7 @@ router.get('/week/:date', authMiddleware, async (req, res) => {
     });
 
     const weeklySummary = dates.map((dStr) => {
-      const totals = logMap[dStr] || {
-        calories: 0,
-        protein: 0,
-        carbs: 0,
-        fats: 0,
-      };
+      const totals = logMap[dStr] || { calories: 0, protein: 0, carbs: 0, fats: 0 };
       const dayName = new Date(dStr + 'T00:00:00Z').toLocaleDateString('en-US', {
         weekday: 'short',
         timeZone: 'UTC',
@@ -198,8 +247,7 @@ router.get('/:date', authMiddleware, async (req, res) => {
 // @route   POST /api/nutrition
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { date, name, description, imageUrl, calories, protein, carbs, fats } =
-      req.body;
+    const { date, name, description, imageUrl, calories, protein, carbs, fats } = req.body;
 
     let log = await Nutrition.findOne({ userId: req.user.userId, date });
     const newMeal = { name, description, imageUrl, calories, protein, carbs, fats };

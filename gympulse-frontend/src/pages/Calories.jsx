@@ -22,7 +22,7 @@ export default function Calories() {
   const [showSetup, setShowSetup] = useState(false);
   const [setupData, setSetupData] = useState({ calories: 2500, protein: 150, carbs: 250, fats: 80 });
 
-  // AI Scanner
+  // AI Scanner — image optional, description optional, at least one required
   const fileInputRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -37,6 +37,9 @@ export default function Calories() {
   // Delete Meal
   const [deleteTargetId, setDeleteTargetId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const hasDescription = description.trim().length > 0;
+  const canAnalyze = Boolean(selectedFile) || hasDescription;
 
   useEffect(() => {
     fetchTargets();
@@ -133,7 +136,6 @@ export default function Calories() {
   };
 
   const jumpToDate = (dateStr) => {
-    // Parse as local noon to avoid timezone day-shift issues
     const [y, m, d] = dateStr.split('-').map(Number);
     setCurrentDate(new Date(y, m - 1, d, 12, 0, 0));
   };
@@ -175,15 +177,23 @@ export default function Calories() {
   };
 
   const handleAnalyze = async () => {
-    if (!selectedFile) return toast.error('Please select a meal image first');
+    if (!canAnalyze) {
+      return toast.error('Add a meal photo, a text description, or both');
+    }
 
     setIsAnalyzing(true);
-    const toastId = toast.loading('AI is scanning your meal...');
+    const toastId = toast.loading(
+      selectedFile && hasDescription
+        ? 'AI is scanning photo + description...'
+        : selectedFile
+          ? 'AI is scanning your meal photo...'
+          : 'AI is estimating macros from your description...'
+    );
 
     try {
       const formData = new FormData();
-      formData.append('image', selectedFile);
-      if (description) formData.append('description', description);
+      if (selectedFile) formData.append('image', selectedFile);
+      if (hasDescription) formData.append('description', description.trim());
 
       const res = await api.post('/api/nutrition/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -191,7 +201,7 @@ export default function Calories() {
 
       setVerificationData({
         ...res.data.estimatedMacros,
-        imageUrl: res.data.imageUrl,
+        imageUrl: res.data.imageUrl || '',
       });
       setShowVerification(true);
       toast.success('Analysis complete!', { id: toastId });
@@ -212,6 +222,7 @@ export default function Calories() {
     try {
       const res = await api.post('/api/nutrition', {
         date: dateStr,
+        description: description.trim() || undefined,
         ...verificationData,
       });
 
@@ -396,7 +407,7 @@ export default function Calories() {
           </div>
         )}
 
-        {/* WEEKLY SUMMARY CHART (Task #12) */}
+        {/* WEEKLY SUMMARY CHART */}
         <div className="bg-bg-surface rounded-3xl p-5 border border-border-subtle shadow-md mb-6">
           <div className="flex items-start justify-between mb-4 gap-3">
             <div>
@@ -493,26 +504,29 @@ export default function Calories() {
           )}
         </div>
 
-        {/* AI Scanner Zone */}
+        {/* AI Scanner — photo optional, description optional, need at least one */}
         <div className="bg-bg-surface rounded-3xl p-6 border border-border-subtle shadow-md mb-8 relative overflow-hidden">
-          <div className="flex items-center gap-2 mb-6">
+          <div className="flex items-center gap-2 mb-2">
             <Sparkles size={18} className="text-brand" />
             <h2 className="text-lg font-extrabold tracking-tight text-text-main">AI Meal Scanner</h2>
             <div className="group relative ml-auto">
               <Info size={16} className="text-text-dim cursor-pointer hover:text-text-muted transition-colors" />
-              <div className="absolute right-0 top-6 w-52 bg-bg-elevated border border-border-subtle text-xs text-text-muted p-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none shadow-xl">
-                Supports JPEG, PNG, WEBP & HEIC. Include portion descriptions for best accuracy.
+              <div className="absolute right-0 top-6 w-56 bg-bg-elevated border border-border-subtle text-xs text-text-muted p-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none shadow-xl">
+                Use a photo, a text description, or both. Example: &quot;2 boiled eggs and toast with butter&quot;.
               </div>
             </div>
           </div>
+          <p className="text-[11px] text-text-dim mb-5">
+            Photo optional · Description optional · Provide at least one
+          </p>
 
           {!previewUrl ? (
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-border-subtle hover:border-brand/40 bg-bg-elevated/40 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-colors mb-4 group"
+              className="border-2 border-dashed border-border-subtle hover:border-brand/40 bg-bg-elevated/40 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors mb-4 group"
             >
-              <UploadCloud size={30} className="text-text-dim group-hover:text-brand mb-2.5 transition-colors" />
-              <p className="text-xs font-bold text-text-main">Tap to upload meal photo</p>
+              <UploadCloud size={28} className="text-text-dim group-hover:text-brand mb-2 transition-colors" />
+              <p className="text-xs font-bold text-text-main">Tap to add meal photo (optional)</p>
               <p className="text-[10px] text-text-dim mt-1 font-medium">JPEG, PNG, WEBP, HEIC</p>
             </div>
           ) : (
@@ -523,8 +537,15 @@ export default function Calories() {
                 className="w-full h-48 object-cover rounded-2xl border border-border-subtle"
               />
               <button
-                onClick={clearSelection}
+                type="button"
+                onClick={() => {
+                  if (previewUrl) URL.revokeObjectURL(previewUrl);
+                  setSelectedFile(null);
+                  setPreviewUrl(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
                 className="absolute top-3 right-3 bg-black/70 backdrop-blur-md p-2 rounded-xl text-text-muted hover:text-text-main transition-colors"
+                title="Remove photo only"
               >
                 <X size={15} strokeWidth={2.5} />
               </button>
@@ -539,9 +560,12 @@ export default function Calories() {
             className="hidden"
           />
 
+          <label className="block text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1.5 ml-1">
+            Meal description {selectedFile ? '(optional)' : '(required if no photo)'}
+          </label>
           <input
             type="text"
-            placeholder="Describe portion (e.g. '1 large bowl of rice with 200g grilled chicken')"
+            placeholder="e.g. 1 large bowl of rice with 200g grilled chicken"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="w-full bg-bg-elevated rounded-xl px-4 py-3 text-xs font-medium placeholder-text-dim focus:outline-none focus:border-brand transition-all border border-border-subtle text-text-main mb-4"
@@ -549,23 +573,30 @@ export default function Calories() {
 
           <button
             onClick={handleAnalyze}
-            disabled={!selectedFile || isAnalyzing}
+            disabled={!canAnalyze || isAnalyzing}
             className="w-full bg-brand hover:bg-brand-hover text-bg-base py-3.5 rounded-xl font-bold text-xs shadow-[0_0_15px_rgba(196,165,116,0.15)] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isAnalyzing ? (
               <span className="flex items-center gap-2">
                 <span className="w-4 h-4 border-2 border-bg-base/30 border-t-bg-base rounded-full animate-spin" />
-                Scanning Meal...
+                Analyzing...
               </span>
             ) : (
               <span className="flex items-center gap-1.5">
-                <Sparkles size={15} /> Analyze Meal
+                <Sparkles size={15} />
+                {selectedFile && hasDescription
+                  ? 'Analyze Photo + Description'
+                  : selectedFile
+                    ? 'Analyze Photo'
+                    : hasDescription
+                      ? 'Analyze Description'
+                      : 'Analyze Meal'}
               </span>
             )}
           </button>
         </div>
 
-        {/* Today's Logs */}
+        {/* Day Logs */}
         <div>
           <h2 className="text-[10px] font-bold tracking-wider text-text-dim mb-3 px-1 uppercase">
             {formatDateLabel(currentDate)}&apos;s Logs ({meals.length})
