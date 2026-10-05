@@ -1,946 +1,744 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Play, 
-  Plus, 
-  Check, 
-  Trash2, 
-  Timer, 
-  Save, 
-  Search, 
-  X, 
-  RotateCcw, 
-  Dumbbell, 
-  Sparkles, 
-  ChevronRight, 
-  ArrowLeft,
-  Flame,
-  Layers,
-  CheckCircle2,
-  AlertTriangle
-} from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import api from '../api';
-const DRAFT_KEY = 'gympulse_active_workout_draft';
+import toast from 'react-hot-toast';
+import ConfirmModal from '../components/ConfirmModal';
+import {
+  Clock, X, Plus, Save, Star, Trash2, Play, Dumbbell,
+  Check, Timer, SkipForward, ArrowLeftRight
+} from 'lucide-react';
 
-const CATEGORIES = ['All', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Cardio'];
+const DEFAULT_REST_SECONDS = 90;
+const DRAFT_STORAGE_KEY = 'gympulse_active_workout_draft';
 
 export default function Workout() {
-  // Data state
-  const [routines, setRoutines] = useState([]);
-  const [exercises, setExercises] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { setHideNav } = useOutletContext() || {};
 
-  // Active workout state
+  const [workoutName, setWorkoutName] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [timeElapsed, setTimeElapsed] = useState(0);
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
-  const [workoutTitle, setWorkoutTitle] = useState('Custom Workout');
-  const [workoutExercises, setWorkoutExercises] = useState([]);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Rest Timer state
-  const [restTimerSeconds, setRestTimerSeconds] = useState(90);
-  const [restInitialSeconds, setRestInitialSeconds] = useState(90);
-  const [isRestTimerActive, setIsRestTimerActive] = useState(false);
+  // Each set: { weight, reps, completed }
+  const [exercises, setExercises] = useState([
+    { exerciseName: '', sets: [{ weight: '', reps: '', completed: false }] }
+  ]);
 
-  // Modal states
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [pickerSwapIndex, setPickerSwapIndex] = useState(null); // null = add new, number = swap target index
-  const [pickerSearch, setPickerSearch] = useState('');
-  const [pickerCategory, setPickerCategory] = useState('All');
+  const [dbExercises, setDbExercises] = useState({});
+  const [dbTemplates, setDbTemplates] = useState([]);
 
-  const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
-  const [templateName, setTemplateName] = useState('');
-  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  // Rest timer
+  const [restSecondsLeft, setRestSecondsLeft] = useState(0);
+  const [isResting, setIsResting] = useState(false);
+  const [restDuration, setRestDuration] = useState(DEFAULT_REST_SECONDS);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  // Delete template confirm
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Refs for timers
-  const workoutTimerRef = useRef(null);
-  const restTimerRef = useRef(null);
+  // Exercise swap mode index
+  const [swappingIndex, setSwappingIndex] = useState(null);
 
-  // 1. Fetch initial routines and exercises
+  // 1. AUTO-RESTORE DRAFT ON MOUNT (If page reloaded during an active session)
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [routinesRes, exercisesRes] = await Promise.all([
-          api.get('/routines'),
-          api.get('/exercises')
-        ]);
-        setRoutines(routinesRes.data || []);
-        setExercises(exercisesRes.data || []);
-      } catch (err) {
-        console.error('Failed to load initial data:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  // 2. Restore active draft from localStorage if available
-  useEffect(() => {
-    const savedDraft = localStorage.getItem(DRAFT_KEY);
-    if (savedDraft) {
-      try {
-        const parsed = JSON.parse(savedDraft);
-        if (parsed && parsed.isWorkoutActive) {
+    try {
+      const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (savedDraft) {
+        const draft = JSON.parse(savedDraft);
+        if (draft && draft.isWorkoutActive) {
+          setWorkoutName(draft.workoutName || '');
+          setDate(draft.date || new Date().toISOString().split('T')[0]);
+          setTimeElapsed(draft.timeElapsed || 0);
+          setExercises(draft.exercises || []);
           setIsWorkoutActive(true);
-          setWorkoutTitle(parsed.workoutTitle || 'Custom Workout');
-          setWorkoutExercises(parsed.workoutExercises || []);
-          setElapsedSeconds(parsed.elapsedSeconds || 0);
+          toast.success('Active workout session restored!');
         }
-      } catch (err) {
-        console.error('Failed to parse active workout draft:', err);
-        localStorage.removeItem(DRAFT_KEY);
       }
+    } catch (err) {
+      console.error('Failed to restore draft workout', err);
     }
   }, []);
 
-  // 3. Auto-save draft to localStorage whenever active state changes
+  // 2. AUTO-SAVE DRAFT TO LOCALSTORAGE WHENEVER STATE CHANGES
   useEffect(() => {
     if (isWorkoutActive) {
-      const draftData = {
-        isWorkoutActive: true,
-        workoutTitle,
-        workoutExercises,
-        elapsedSeconds
+      const draftPayload = {
+        workoutName,
+        date,
+        timeElapsed,
+        exercises,
+        isWorkoutActive: true
       };
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
-    } else {
-      localStorage.removeItem(DRAFT_KEY);
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
     }
-  }, [isWorkoutActive, workoutTitle, workoutExercises, elapsedSeconds]);
+  }, [workoutName, date, timeElapsed, exercises, isWorkoutActive]);
 
-  // 4. Reload protection & Overscroll-behavior adjustment during active workout
+  // 3. BROWSER UNLOAD WARNING (Warn user if they attempt to refresh or close tab)
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (isWorkoutActive) {
         e.preventDefault();
-        e.returnValue = 'You have an active workout in progress. Leaving will pause tracking.';
-        return e.returnValue;
+        e.returnValue = ''; // Required for browser system dialog to trigger
       }
     };
 
-    if (isWorkoutActive) {
-      window.addEventListener('beforeunload', handleBeforeUnload);
-      document.body.style.overscrollBehaviorY = 'none';
-    } else {
-      document.body.style.overscrollBehaviorY = 'auto';
-    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isWorkoutActive]);
 
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.body.style.overscrollBehaviorY = 'auto';
+  // Hide bottom nav while workout is active
+  useEffect(() => {
+    if (setHideNav) setHideNav(isWorkoutActive);
+    return () => { if (setHideNav) setHideNav(false); };
+  }, [isWorkoutActive, setHideNav]);
+
+  // Load library
+  useEffect(() => {
+    const fetchLibraryData = async () => {
+      try {
+        const [exerciseRes, templateRes] = await Promise.all([
+          api.get('/api/exercises'),
+          api.get('/api/templates')
+        ]);
+        const grouped = exerciseRes.data.reduce((acc, curr) => {
+          if (!acc[curr.category]) acc[curr.category] = [];
+          acc[curr.category].push(curr);
+          return acc;
+        }, {});
+        setDbExercises(grouped);
+        setDbTemplates(templateRes.data);
+      } catch (err) {
+        toast.error('Failed to load exercise library');
+        console.error(err);
+      }
     };
+    fetchLibraryData();
+  }, []);
+
+  // Session stopwatch
+  useEffect(() => {
+    if (!isWorkoutActive) return;
+    const timer = setInterval(() => setTimeElapsed((p) => p + 1), 1000);
+    return () => clearInterval(timer);
   }, [isWorkoutActive]);
 
-  // 5. Workout elapsed time counter
+  // Rest countdown
   useEffect(() => {
-    if (isWorkoutActive) {
-      workoutTimerRef.current = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 1);
-      }, 1000);
-    } else {
-      clearInterval(workoutTimerRef.current);
+    if (!isResting || restSecondsLeft <= 0) {
+      if (restSecondsLeft <= 0 && isResting) setIsResting(false);
+      return;
     }
+    const t = setInterval(() => setRestSecondsLeft((p) => p - 1), 1000);
+    return () => clearInterval(t);
+  }, [isResting, restSecondsLeft]);
 
-    return () => clearInterval(workoutTimerRef.current);
-  }, [isWorkoutActive]);
-
-  // 6. Rest countdown timer execution
-  useEffect(() => {
-    if (isRestTimerActive && restTimerSeconds > 0) {
-      restTimerRef.current = setInterval(() => {
-        setRestTimerSeconds((prev) => prev - 1);
-      }, 1000);
-    } else if (restTimerSeconds === 0 && isRestTimerActive) {
-      setIsRestTimerActive(false);
-      clearInterval(restTimerRef.current);
-      // Play system notification chime if supported
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('GymPulse Rest Timer', { body: 'Rest period completed! Time for your next set.' });
-      }
-    } else {
-      clearInterval(restTimerRef.current);
-    }
-
-    return () => clearInterval(restTimerRef.current);
-  }, [isRestTimerActive, restTimerSeconds]);
-
-  // Format seconds to MM:SS or HH:MM:SS
-  const formatTime = (totalSec) => {
-    const hrs = Math.floor(totalSec / 3600);
-    const mins = Math.floor((totalSec % 3600) / 60);
-    const secs = totalSec % 60;
-
-    const pad = (num) => String(num).padStart(2, '0');
-
-    if (hrs > 0) {
-      return `${hrs}:${pad(mins)}:${pad(secs)}`;
-    }
-    return `${pad(mins)}:${pad(secs)}`;
+  const formatTime = (totalSeconds) => {
+    const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const s = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
   };
 
-  // Start Quick Workout
-  const handleStartEmptyWorkout = () => {
-    setWorkoutTitle('Quick Workout');
-    setWorkoutExercises([]);
-    setElapsedSeconds(0);
+  const startRest = useCallback(() => {
+    setRestSecondsLeft(restDuration);
+    setIsResting(true);
+  }, [restDuration]);
+
+  const skipRest = () => {
+    setIsResting(false);
+    setRestSecondsLeft(0);
+  };
+
+  const addRestTime = (secs) => {
+    setRestSecondsLeft((p) => p + secs);
+  };
+
+  // Clear Draft Helper
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+  };
+
+  // --- Start workout ---
+  const startWorkout = async (templateId) => {
+    if (templateId) {
+      const selectedTemplate = dbTemplates.find((t) => t._id === templateId);
+      if (!selectedTemplate) return;
+
+      setWorkoutName(selectedTemplate.templateName);
+
+      let lastWorkoutExercises = null;
+      try {
+        const res = await api.get(
+          `/api/workouts/last/${encodeURIComponent(selectedTemplate.templateName)}`
+        );
+        lastWorkoutExercises = res.data.exercises;
+      } catch {
+        /* first time is fine */
+      }
+
+      const mappedExercises = selectedTemplate.exercises.map((ex) => {
+        const prevEx = lastWorkoutExercises?.find(
+          (le) => le.exerciseName.toLowerCase() === ex.exerciseName.toLowerCase()
+        );
+        const generatedSets = Array.from({ length: ex.defaultSets }).map((_, i) => {
+          let weight = '';
+          let reps = '';
+          if (prevEx && prevEx.sets[i]) {
+            weight = prevEx.sets[i].weight;
+            reps = prevEx.sets[i].reps;
+          }
+          return { weight, reps, completed: false };
+        });
+        return { exerciseName: ex.exerciseName, sets: generatedSets };
+      });
+
+      setExercises(mappedExercises);
+      toast.success(
+        `${selectedTemplate.templateName} loaded${lastWorkoutExercises ? ' with previous weights!' : '!'}`
+      );
+    } else {
+      setWorkoutName('');
+      setExercises([{ exerciseName: '', sets: [{ weight: '', reps: '', completed: false }] }]);
+    }
+
+    setTimeElapsed(0);
+    setIsResting(false);
+    setRestSecondsLeft(0);
+    setSwappingIndex(null);
     setIsWorkoutActive(true);
   };
 
-  // Start Routine Workout
-  const handleStartRoutine = (routine) => {
-    setWorkoutTitle(routine.title);
-    const formattedExercises = (routine.exercises || []).map((item) => ({
-      exerciseId: item.exercise?._id || item.exercise || '',
-      name: item.exercise?.name || 'Exercise',
-      category: item.exercise?.category || 'General',
-      sets: (item.sets || [{ weight: 0, reps: 0 }]).map((set) => ({
-        weight: set.weight || 0,
-        reps: set.reps || 0,
-        completed: false
-      }))
-    }));
-
-    setWorkoutExercises(formattedExercises);
-    setElapsedSeconds(0);
-    setIsWorkoutActive(true);
-  };
-
-  // Open Exercise Picker Modal (Add or Swap)
-  const openExercisePicker = (swapIndex = null) => {
-    setPickerSwapIndex(swapIndex);
-    setPickerSearch('');
-    setPickerCategory('All');
-    setIsPickerOpen(true);
-  };
-
-  // Select Exercise from Picker
-  const handleSelectExerciseFromPicker = (exercise) => {
-    if (pickerSwapIndex !== null) {
-      // Swap existing exercise
-      setWorkoutExercises((prev) => {
-        const updated = [...prev];
-        updated[pickerSwapIndex] = {
-          ...updated[pickerSwapIndex],
-          exerciseId: exercise._id,
-          name: exercise.name,
-          category: exercise.category
-        };
-        return updated;
-      });
-    } else {
-      // Append new exercise with 3 default sets
-      setWorkoutExercises((prev) => [
-        ...prev,
-        {
-          exerciseId: exercise._id,
-          name: exercise.name,
-          category: exercise.category,
-          sets: [
-            { weight: 0, reps: 10, completed: false },
-            { weight: 0, reps: 10, completed: false },
-            { weight: 0, reps: 10, completed: false }
-          ]
-        }
-      ]);
-    }
-
-    setIsPickerOpen(false);
-    setPickerSwapIndex(null);
-  };
-
-  // Add Set to Exercise
-  const handleAddSet = (exerciseIndex) => {
-    setWorkoutExercises((prev) => {
-      const updated = [...prev];
-      const target = updated[exerciseIndex];
-      const lastSet = target.sets[target.sets.length - 1] || { weight: 0, reps: 10 };
-      target.sets.push({
-        weight: lastSet.weight,
-        reps: lastSet.reps,
-        completed: false
-      });
-      return updated;
-    });
-  };
-
-  // Delete Set from Exercise
-  const handleDeleteSet = (exerciseIndex, setIndex) => {
-    setWorkoutExercises((prev) => {
-      const updated = [...prev];
-      updated[exerciseIndex].sets.splice(setIndex, 1);
-      return updated;
-    });
-  };
-
-  // Toggle Set Completion
-  const handleToggleSetComplete = (exerciseIndex, setIndex) => {
-    setWorkoutExercises((prev) => {
-      const updated = [...prev];
-      const targetSet = updated[exerciseIndex].sets[setIndex];
-      targetSet.completed = !targetSet.completed;
-
-      // Trigger Rest Timer automatically when marking set as complete
-      if (targetSet.completed) {
-        setRestTimerSeconds(restInitialSeconds);
-        setIsRestTimerActive(true);
-      }
-
-      return updated;
-    });
-  };
-
-  // Update Set Data (Weight or Reps)
-  const handleUpdateSet = (exerciseIndex, setIndex, field, value) => {
-    const numericValue = parseFloat(value) || 0;
-    setWorkoutExercises((prev) => {
-      const updated = [...prev];
-      updated[exerciseIndex].sets[setIndex][field] = numericValue;
-      return updated;
-    });
-  };
-
-  // Remove Exercise
-  const handleRemoveExercise = (exerciseIndex) => {
-    setWorkoutExercises((prev) => prev.filter((_, idx) => idx !== exerciseIndex));
-  };
-
-  // Rest Timer Adjustments
-  const adjustRestTimer = (secondsToAdd) => {
-    setRestTimerSeconds((prev) => Math.max(0, prev + secondsToAdd));
-  };
-
-  const toggleRestTimer = () => {
-    setIsRestTimerActive((prev) => !prev);
-  };
-
-  const resetRestTimer = () => {
-    setIsRestTimerActive(false);
-    setRestTimerSeconds(restInitialSeconds);
-  };
-
-  // Save Current Active Workout as Custom Template
-  const handleSaveAsTemplate = async (e) => {
-    e.preventDefault();
-    if (!templateName.trim()) return;
-
-    setIsSavingTemplate(true);
+  // --- Template delete ---
+  const confirmDeleteTemplate = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
     try {
-      const payload = {
-        title: templateName.trim(),
-        description: 'User created workout template',
-        exercises: workoutExercises.map((ex) => ({
-          exercise: ex.exerciseId,
-          sets: ex.sets.map((s) => ({ weight: s.weight, reps: s.reps }))
-        }))
-      };
-
-      const res = await api.post('/routines', payload);
-      setRoutines((prev) => [res.data, ...prev]);
-      setIsSaveTemplateOpen(false);
-      setTemplateName('');
-    } catch (err) {
-      console.error('Failed to save template:', err);
-      setErrorMessage('Failed to save workout template. Check form inputs.');
+      await api.delete(`/api/templates/${deleteTargetId}`);
+      setDbTemplates((prev) => prev.filter((t) => t._id !== deleteTargetId));
+      toast.success('Template deleted');
+      setDeleteTargetId(null);
+    } catch {
+      toast.error('Failed to delete template');
     } finally {
-      setIsSavingTemplate(false);
+      setIsDeleting(false);
     }
   };
 
-  // Save/Finish Workout Log
-  const handleFinishWorkout = async () => {
-    if (workoutExercises.length === 0) {
-      setErrorMessage('Please add at least one exercise before completing your workout.');
+  // --- Exercise / set helpers ---
+  const addExercise = () =>
+    setExercises([
+      ...exercises,
+      { exerciseName: '', sets: [{ weight: '', reps: '', completed: false }] },
+    ]);
+
+  const removeExercise = (exerciseIndex) => {
+    setExercises(exercises.filter((_, i) => i !== exerciseIndex));
+    if (swappingIndex === exerciseIndex) setSwappingIndex(null);
+  };
+
+  const addSet = (exerciseIndex) => {
+    const updated = [...exercises];
+    updated[exerciseIndex].sets.push({ weight: '', reps: '', completed: false });
+    setExercises(updated);
+  };
+
+  const removeSet = (exerciseIndex, setIndex) => {
+    const updated = [...exercises];
+    updated[exerciseIndex].sets = updated[exerciseIndex].sets.filter((_, i) => i !== setIndex);
+    setExercises(updated);
+  };
+
+  const handleExerciseChange = (value, exerciseIndex) => {
+    const updated = [...exercises];
+    updated[exerciseIndex].exerciseName = value;
+    setExercises(updated);
+    setSwappingIndex(null);
+  };
+
+  const handleSetChange = (value, field, exerciseIndex, setIndex) => {
+    const updated = [...exercises];
+    updated[exerciseIndex].sets[setIndex][field] = value;
+    setExercises(updated);
+  };
+
+  const toggleSetComplete = (exerciseIndex, setIndex) => {
+    const updated = [...exercises];
+    const set = updated[exerciseIndex].sets[setIndex];
+    const willComplete = !set.completed;
+    set.completed = willComplete;
+    setExercises(updated);
+    if (willComplete) startRest();
+  };
+
+  // --- Save as template ---
+  const handleSaveAsTemplate = async () => {
+    if (!workoutName.trim()) {
+      toast.error('Enter a workout name first');
+      return;
+    }
+    const validExercises = exercises.filter((ex) => ex.exerciseName);
+    if (validExercises.length === 0) {
+      toast.error('Add at least one exercise');
       return;
     }
 
-    setIsSubmitting(true);
-    setErrorMessage('');
-
+    const toastId = toast.loading('Saving template...');
     try {
-      // Filter exercises and complete sets
-      const formattedExercises = workoutExercises
-        .map((ex) => ({
-          exercise: ex.exerciseId,
-          sets: ex.sets
-            .filter((s) => s.completed || s.weight > 0 || s.reps > 0)
-            .map((s) => ({
-              weight: Number(s.weight) || 0,
-              reps: Number(s.reps) || 0,
-              completed: Boolean(s.completed)
-            }))
-        }))
-        .filter((ex) => ex.sets.length > 0 && ex.exercise);
-
-      if (formattedExercises.length === 0) {
-        setErrorMessage('Log at least one set with weight or reps before finishing.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      const payload = {
-        title: workoutTitle || 'Logged Workout',
-        duration: Math.max(1, Math.round(elapsedSeconds / 60)), // Convert to minutes
-        exercises: formattedExercises,
-        date: new Date().toISOString()
-      };
-
-      await api.post('/workouts', payload);
-
-      // Reset state and clear localStorage draft
-      setIsWorkoutActive(false);
-      localStorage.removeItem(DRAFT_KEY);
-      setWorkoutExercises([]);
-      setElapsedSeconds(0);
-      setIsRestTimerActive(false);
-    } catch (err) {
-      console.error('Failed to finish workout:', err);
-      setErrorMessage(err.response?.data?.error || 'Failed to save workout session.');
-    } finally {
-      setIsSubmitting(false);
+      const templateExercises = validExercises.map((ex) => ({
+        exerciseName: ex.exerciseName,
+        defaultSets: ex.sets.length || 3,
+        defaultReps: ex.sets.length > 0 ? Number(ex.sets[0].reps) || 10 : 10,
+      }));
+      const res = await api.post('/api/templates', {
+        templateName: workoutName,
+        exercises: templateExercises,
+      });
+      setDbTemplates([...dbTemplates, res.data]);
+      toast.success(`Template "${workoutName}" saved`, { id: toastId });
+    } catch {
+      toast.error('Failed to save template', { id: toastId });
     }
   };
 
-  // Cancel / Discard Active Workout
-  const handleDiscardWorkout = () => {
-    if (window.confirm('Discard current session? Unsaved progress will be lost.')) {
+  // --- Finish workout ---
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const cleanedExercises = exercises
+      .map((ex) => {
+        const validSets = ex.sets
+          .filter((set) => set.weight !== '' && set.reps !== '')
+          .map((set) => ({
+            weight: Number(set.weight),
+            reps: Number(set.reps),
+          }));
+        return { exerciseName: ex.exerciseName, sets: validSets };
+      })
+      .filter((ex) => ex.exerciseName !== '' && ex.sets.length > 0);
+
+    if (cleanedExercises.length === 0) {
+      toast.error('Log at least one complete set to finish');
+      return;
+    }
+
+    const toastId = toast.loading('Saving workout...');
+    try {
+      const durationInMinutes = Math.max(1, Math.round(timeElapsed / 60));
+      await api.post('/api/workouts', {
+        workoutName,
+        duration: durationInMinutes,
+        date,
+        exercises: cleanedExercises,
+      });
+      
+      clearDraft(); // Clean up localStorage draft after successful save
+      toast.success('Workout logged!', { id: toastId });
       setIsWorkoutActive(false);
-      localStorage.removeItem(DRAFT_KEY);
-      setWorkoutExercises([]);
-      setElapsedSeconds(0);
-      setIsRestTimerActive(false);
+      setIsResting(false);
+    } catch {
+      toast.error('Failed to save workout', { id: toastId });
     }
   };
 
-  // Filter exercises for picker modal
-  const filteredExercises = exercises.filter((ex) => {
-    const matchesSearch = ex.name.toLowerCase().includes(pickerSearch.toLowerCase()) ||
-      ex.targetMuscles?.some((m) => m.toLowerCase().includes(pickerSearch.toLowerCase()));
-    const matchesCategory = pickerCategory === 'All' || ex.category.toLowerCase() === pickerCategory.toLowerCase();
-    return matchesSearch && matchesCategory;
-  });
+  const handleCancelWorkout = () => {
+    clearDraft(); // Clean up localStorage draft upon explicit cancel
+    setIsWorkoutActive(false);
+    setTimeElapsed(0);
+    setIsResting(false);
+    setRestSecondsLeft(0);
+    setWorkoutName('');
+    setExercises([{ exerciseName: '', sets: [{ weight: '', reps: '', completed: false }] }]);
+    setSwappingIndex(null);
+  };
 
-  if (isLoading) {
+  const inputClass =
+    'w-full bg-bg-elevated rounded-2xl px-5 py-3.5 font-medium placeholder-text-dim focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all border border-border-subtle text-text-main';
+
+  // ========== TEMPLATE HUB ==========
+  if (!isWorkoutActive) {
+    const systemTemplates = dbTemplates.filter((t) => t.isSystemTemplate);
+    const customTemplates = dbTemplates.filter((t) => !t.isSystemTemplate);
+
     return (
-      <div className="min-h-screen bg-[#0F0F10] text-[#E4E4E7] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-[#C4A574] border-t-transparent rounded-full animate-spin" />
-          <p className="text-[#A1A1AA] text-sm">Loading Workout Hub...</p>
+      <div className="min-h-screen bg-bg-base text-text-main p-4 sm:p-6 font-sans pb-28">
+        <div className="max-w-2xl mx-auto">
+          <div className="pt-4 mb-8">
+            <h1 className="text-3xl font-extrabold tracking-tight">Workout</h1>
+            <p className="text-text-muted font-medium mt-1 text-sm">
+              Start a session or pick a blueprint
+            </p>
+          </div>
+
+          <button
+            onClick={() => startWorkout(null)}
+            className="w-full bg-brand hover:bg-brand-hover text-bg-base py-5 rounded-2xl font-extrabold text-lg shadow-[0_0_20px_rgba(196,165,116,0.15)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 mb-8"
+          >
+            <Play size={20} strokeWidth={2.5} />
+            Start Empty Workout
+          </button>
+
+          {systemTemplates.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-[10px] font-bold text-text-dim tracking-wider uppercase mb-3 px-1">
+                System Templates
+              </h2>
+              <div className="space-y-2">
+                {systemTemplates.map((t) => (
+                  <button
+                    key={t._id}
+                    onClick={() => startWorkout(t._id)}
+                    className="w-full bg-bg-surface border border-border-subtle rounded-2xl px-5 py-4 flex items-center justify-between hover:border-brand/30 transition-all group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-brand/10 flex items-center justify-center">
+                        <Star size={15} className="text-brand" strokeWidth={2.2} />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold text-sm text-text-main">{t.templateName}</p>
+                        <p className="text-xs text-text-dim mt-0.5">
+                          {t.exercises.length} exercises
+                        </p>
+                      </div>
+                    </div>
+                    <Play
+                      size={16}
+                      className="text-text-dim group-hover:text-brand transition-colors"
+                      strokeWidth={2}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {customTemplates.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-[10px] font-bold text-text-dim tracking-wider uppercase mb-3 px-1">
+                Your Blueprints
+              </h2>
+              <div className="space-y-2">
+                {customTemplates.map((t) => (
+                  <div
+                    key={t._id}
+                    className="bg-bg-surface border border-border-subtle rounded-2xl px-5 py-4 flex items-center justify-between hover:border-brand/20 transition-all"
+                  >
+                    <button
+                      onClick={() => startWorkout(t._id)}
+                      className="flex items-center gap-3 flex-1 text-left"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-bg-elevated flex items-center justify-center">
+                        <Dumbbell size={15} className="text-brand" strokeWidth={2.2} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-text-main">{t.templateName}</p>
+                        <p className="text-xs text-text-dim mt-0.5">
+                          {t.exercises.length} exercises
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setDeleteTargetId(t._id)}
+                      className="text-text-dim hover:text-accent-rose hover:bg-accent-rose/10 p-2 rounded-lg transition-colors"
+                      title="Delete Template"
+                    >
+                      <Trash2 size={14} strokeWidth={2} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {dbTemplates.length === 0 && (
+            <div className="text-center py-12 bg-bg-surface rounded-3xl border border-border-subtle">
+              <Dumbbell size={32} className="text-text-dim mx-auto mb-3" strokeWidth={1.2} />
+              <p className="text-text-muted font-medium text-sm">
+                No templates yet. Start a workout and save it as a blueprint.
+              </p>
+            </div>
+          )}
         </div>
+
+        <ConfirmModal
+          isOpen={!!deleteTargetId}
+          onClose={() => setDeleteTargetId(null)}
+          onConfirm={confirmDeleteTemplate}
+          title="Delete template?"
+          message="This blueprint will be permanently removed. Workouts you already logged stay intact."
+          confirmLabel="Delete"
+          confirmColor="rose"
+          isLoading={isDeleting}
+        />
       </div>
     );
   }
 
+  // ========== ACTIVE WORKOUT ==========
   return (
-    <div className="min-h-screen bg-[#0F0F10] text-[#E4E4E7] pb-24">
-      {/* HEADER BAR */}
-      <header className="sticky top-0 z-20 bg-[#0F0F10]/90 backdrop-blur-md border-b border-[#27272A] px-4 py-4 sm:px-8">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#E4E4E7]">
-              {isWorkoutActive ? workoutTitle : 'Workout Engine'}
-            </h1>
-            <p className="text-xs sm:text-sm text-[#A1A1AA]">
-              {isWorkoutActive ? 'Session in progress' : 'Select a routine or launch an empty workout'}
-            </p>
-          </div>
+    <div className="min-h-screen bg-bg-base text-text-main p-4 sm:p-6 font-sans pb-36">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-extrabold tracking-tight">Active Session</h1>
+          <button
+            onClick={handleCancelWorkout}
+            className="text-accent-rose font-semibold hover:opacity-80 transition-colors flex items-center gap-1.5 text-sm"
+          >
+            <X size={16} strokeWidth={2.5} />
+            Cancel
+          </button>
+        </div>
 
-          {isWorkoutActive && (
-            <div className="flex items-center gap-3">
-              <div className="hidden sm:flex items-center gap-2 bg-[#18181A] px-3 py-1.5 rounded-lg border border-[#27272A]">
-                <Timer className="w-4 h-4 text-[#C4A574]" />
-                <span className="font-mono text-sm font-semibold text-[#C4A574]">
-                  {formatTime(elapsedSeconds)}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-3">
+            <input
+              type="text"
+              placeholder="Workout Name"
+              required
+              value={workoutName}
+              onChange={(e) => setWorkoutName(e.target.value)}
+              className={`${inputClass} text-xl font-bold`}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className={`${inputClass} text-text-muted [color-scheme:dark]`}
+              />
+              <div className="bg-bg-surface rounded-2xl border border-border-subtle flex items-center justify-center">
+                <span className="text-brand font-mono text-2xl font-extrabold tracking-widest flex items-center gap-2">
+                  <Clock size={18} className="text-text-dim" strokeWidth={2} />
+                  {formatTime(timeElapsed)}
                 </span>
               </div>
-              <button
-                onClick={handleDiscardWorkout}
-                className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 border border-red-900/40 hover:border-red-500/50 bg-red-950/20 rounded-lg transition-colors"
-              >
-                Discard
-              </button>
-              <button
-                onClick={handleFinishWorkout}
-                disabled={isSubmitting}
-                className="px-4 py-1.5 text-xs sm:text-sm font-semibold text-black bg-[#C4A574] hover:bg-[#D4B886] disabled:opacity-50 rounded-lg transition-colors flex items-center gap-1.5 shadow-md shadow-[#C4A574]/10"
-              >
-                <Check className="w-4 h-4" />
-                Finish
-              </button>
             </div>
-          )}
-        </div>
-      </header>
+          </div>
 
-      {/* ERROR / NOTIFICATION BANNER */}
-      {errorMessage && (
-        <div className="max-w-6xl mx-auto mt-4 px-4">
-          <div className="bg-red-950/40 border border-red-800/60 rounded-xl p-3 text-xs sm:text-sm text-red-300 flex items-center justify-between">
+          {/* Rest duration preference */}
+          <div className="flex items-center justify-between bg-bg-surface border border-border-subtle rounded-2xl px-4 py-3">
+            <span className="text-xs font-bold text-text-muted flex items-center gap-2">
+              <Timer size={14} className="text-brand" /> Default rest
+            </span>
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-            <button onClick={() => setErrorMessage('')} className="text-red-400 hover:text-red-200">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MAIN CONTAINER */}
-      <main className="max-w-6xl mx-auto px-4 mt-6 sm:px-8">
-        {!isWorkoutActive ? (
-          /* MODE 1: ROUTINE SELECTION HUB */
-          <div className="space-y-8">
-            {/* Quick Start Card */}
-            <div className="bg-gradient-to-r from-[#18181A] to-[#222225] border border-[#27272A] rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-[#C4A574]/5 rounded-full blur-3xl pointer-events-none" />
-              <div className="space-y-2 z-10">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#C4A574]/10 text-[#C4A574] border border-[#C4A574]/20">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Freeform Session
-                </span>
-                <h2 className="text-xl sm:text-2xl font-bold text-[#E4E4E7]">Start Empty Workout</h2>
-                <p className="text-xs sm:text-sm text-[#A1A1AA] max-w-md">
-                  Begin a blank session and choose exercises dynamically from the library of 77+ movements.
-                </p>
-              </div>
-              <button
-                onClick={handleStartEmptyWorkout}
-                className="z-10 w-full sm:w-auto px-6 py-3 bg-[#C4A574] hover:bg-[#D4B886] text-black font-semibold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-[#C4A574]/15"
-              >
-                <Play className="w-4 h-4 fill-black" />
-                Start Empty Session
-              </button>
-            </div>
-
-            {/* Routines Grid */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-5 h-5 text-[#C4A574]" />
-                  <h2 className="text-lg font-bold text-[#E4E4E7]">Workout Templates & Routines</h2>
-                </div>
-                <span className="text-xs text-[#A1A1AA]">{routines.length} Available</span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {routines.map((routine) => (
-                  <div
-                    key={routine._id}
-                    className="bg-[#18181A] border border-[#27272A] hover:border-[#C4A574]/40 rounded-xl p-5 flex flex-col justify-between transition-all group"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between">
-                        <h3 className="font-semibold text-base text-[#E4E4E7] group-hover:text-[#C4A574] transition-colors">
-                          {routine.title}
-                        </h3>
-                        {routine.isSystem && (
-                          <span className="text-[10px] font-medium uppercase tracking-wider bg-[#27272A] text-[#A1A1AA] px-2 py-0.5 rounded">
-                            Preset
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-xs text-[#A1A1AA] line-clamp-2">
-                        {routine.description || 'Pre-configured workout routine.'}
-                      </p>
-
-                      <div className="text-xs text-[#A1A1AA]/80 space-y-1 pt-2 border-t border-[#27272A]">
-                        {(routine.exercises || []).slice(0, 4).map((ex, idx) => (
-                          <div key={idx} className="flex items-center justify-between">
-                            <span className="truncate max-w-[180px]">
-                              {ex.exercise?.name || 'Exercise'}
-                            </span>
-                            <span className="text-[11px] text-[#A1A1AA] font-mono">
-                              {ex.sets?.length || 3} sets
-                            </span>
-                          </div>
-                        ))}
-                        {(routine.exercises || []).length > 4 && (
-                          <p className="text-[11px] text-[#C4A574]">
-                            + {(routine.exercises || []).length - 4} more exercises
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleStartRoutine(routine)}
-                      className="mt-5 w-full py-2.5 bg-[#27272A] hover:bg-[#C4A574] hover:text-black text-[#E4E4E7] text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <Play className="w-3.5 h-3.5" />
-                      Start Routine
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* MODE 2: ACTIVE WORKOUT EXECUTION */
-          <div className="space-y-6">
-            {/* Top Bar Stats & Rest Timer Control */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Elapsed Time Widget */}
-              <div className="bg-[#18181A] border border-[#27272A] rounded-xl p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-[#A1A1AA] uppercase tracking-wider font-medium">Elapsed Time</p>
-                  <p className="text-2xl font-bold font-mono text-[#E4E4E7] mt-1">{formatTime(elapsedSeconds)}</p>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-[#27272A] flex items-center justify-center">
-                  <Timer className="w-5 h-5 text-[#C4A574]" />
-                </div>
-              </div>
-
-              {/* Active Rest Timer Widget */}
-              <div className="md:col-span-2 bg-[#18181A] border border-[#27272A] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isRestTimerActive ? 'bg-[#C4A574]/20 text-[#C4A574]' : 'bg-[#27272A] text-[#A1A1AA]'}`}>
-                    <Timer className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-[#A1A1AA] uppercase tracking-wider font-medium">Rest Timer</p>
-                      {isRestTimerActive && (
-                        <span className="w-2 h-2 rounded-full bg-[#C4A574] animate-pulse" />
-                      )}
-                    </div>
-                    <p className="text-2xl font-bold font-mono text-[#C4A574] mt-0.5">
-                      {formatTime(restTimerSeconds)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => adjustRestTimer(-15)}
-                    className="px-2.5 py-1.5 text-xs bg-[#27272A] hover:bg-[#323236] text-[#E4E4E7] rounded-lg transition-colors font-mono"
-                  >
-                    -15s
-                  </button>
-                  <button
-                    onClick={() => adjustRestTimer(30)}
-                    className="px-2.5 py-1.5 text-xs bg-[#27272A] hover:bg-[#323236] text-[#E4E4E7] rounded-lg transition-colors font-mono"
-                  >
-                    +30s
-                  </button>
-                  <button
-                    onClick={toggleRestTimer}
-                    className="px-3 py-1.5 text-xs bg-[#C4A574] text-black hover:bg-[#D4B886] font-semibold rounded-lg transition-colors"
-                  >
-                    {isRestTimerActive ? 'Pause' : 'Start Rest'}
-                  </button>
-                  <button
-                    onClick={resetRestTimer}
-                    className="p-1.5 text-[#A1A1AA] hover:text-[#E4E4E7] bg-[#27272A] rounded-lg transition-colors"
-                    title="Reset timer"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Exercises List */}
-            <div className="space-y-6">
-              {workoutExercises.length === 0 ? (
-                <div className="bg-[#18181A] border border-dashed border-[#27272A] rounded-2xl p-12 text-center space-y-4">
-                  <div className="w-12 h-12 bg-[#27272A] rounded-full flex items-center justify-center mx-auto text-[#C4A574]">
-                    <Dumbbell className="w-6 h-6" />
-                  </div>
-                  <p className="text-base text-[#E4E4E7] font-semibold">No exercises added yet</p>
-                  <p className="text-xs text-[#A1A1AA] max-w-sm mx-auto">
-                    Click the button below to search through 77+ exercises and populate your workout session.
-                  </p>
-                  <button
-                    onClick={() => openExercisePicker(null)}
-                    className="px-5 py-2.5 bg-[#C4A574] hover:bg-[#D4B886] text-black font-semibold text-xs rounded-xl transition-colors inline-flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add First Exercise
-                  </button>
-                </div>
-              ) : (
-                workoutExercises.map((ex, exIndex) => (
-                  <div key={exIndex} className="bg-[#18181A] border border-[#27272A] rounded-2xl p-5 space-y-4">
-                    {/* Exercise Header */}
-                    <div className="flex items-center justify-between border-b border-[#27272A] pb-3">
-                      <div className="flex items-center gap-3">
-                        <span className="w-7 h-7 bg-[#27272A] text-[#C4A574] rounded-lg flex items-center justify-center text-xs font-bold font-mono">
-                          {exIndex + 1}
-                        </span>
-                        <div>
-                          <h3 className="font-bold text-[#E4E4E7] text-base sm:text-lg">{ex.name}</h3>
-                          <span className="text-[11px] text-[#A1A1AA] capitalize">{ex.category}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openExercisePicker(exIndex)}
-                          className="px-2.5 py-1 text-xs text-[#C4A574] hover:bg-[#C4A574]/10 border border-[#C4A574]/20 rounded-lg transition-colors"
-                        >
-                          Swap
-                        </button>
-                        <button
-                          onClick={() => handleRemoveExercise(exIndex)}
-                          className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-950/30 rounded-lg transition-colors"
-                          title="Remove Exercise"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Table / Set Rows */}
-                    <div className="space-y-2">
-                      {/* Table Header */}
-                      <div className="grid grid-cols-12 text-[11px] uppercase tracking-wider font-semibold text-[#A1A1AA] px-2">
-                        <span className="col-span-2 text-center">Set</span>
-                        <span className="col-span-4 text-center">Weight (kg)</span>
-                        <span className="col-span-4 text-center">Reps</span>
-                        <span className="col-span-2 text-center">Status</span>
-                      </div>
-
-                      {/* Set Rows */}
-                      {ex.sets.map((set, setIndex) => (
-                        <div
-                          key={setIndex}
-                          className={`grid grid-cols-12 items-center gap-2 p-2 rounded-xl border transition-colors ${
-                            set.completed 
-                              ? 'bg-[#C4A574]/10 border-[#C4A574]/30' 
-                              : 'bg-[#0F0F10] border-[#27272A]'
-                          }`}
-                        >
-                          {/* Set Number & Delete */}
-                          <div className="col-span-2 flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleDeleteSet(exIndex, setIndex)}
-                              className="text-red-400/60 hover:text-red-400 p-0.5"
-                              title="Delete set"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                            <span className="font-mono text-xs font-semibold text-[#E4E4E7]">
-                              {setIndex + 1}
-                            </span>
-                          </div>
-
-                          {/* Weight Input */}
-                          <div className="col-span-4">
-                            <input
-                              type="number"
-                              step="0.5"
-                              min="0"
-                              value={set.weight || ''}
-                              onChange={(e) => handleUpdateSet(exIndex, setIndex, 'weight', e.target.value)}
-                              placeholder="0"
-                              className="w-full bg-[#18181A] border border-[#27272A] focus:border-[#C4A574] text-center text-sm text-[#E4E4E7] py-1.5 rounded-lg outline-none font-mono"
-                            />
-                          </div>
-
-                          {/* Reps Input */}
-                          <div className="col-span-4">
-                            <input
-                              type="number"
-                              min="0"
-                              value={set.reps || ''}
-                              onChange={(e) => handleUpdateSet(exIndex, setIndex, 'reps', e.target.value)}
-                              placeholder="0"
-                              className="w-full bg-[#18181A] border border-[#27272A] focus:border-[#C4A574] text-center text-sm text-[#E4E4E7] py-1.5 rounded-lg outline-none font-mono"
-                            />
-                          </div>
-
-                          {/* Complete Toggle */}
-                          <div className="col-span-2 flex justify-center">
-                            <button
-                              onClick={() => handleToggleSetComplete(exIndex, setIndex)}
-                              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                                set.completed
-                                  ? 'bg-[#C4A574] text-black font-bold shadow-md shadow-[#C4A574]/20'
-                                  : 'bg-[#27272A] text-[#A1A1AA] hover:text-[#E4E4E7]'
-                              }`}
-                            >
-                              <Check className="w-4 h-4 stroke-[3]" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Add Set Button */}
-                    <button
-                      onClick={() => handleAddSet(exIndex)}
-                      className="w-full py-2 bg-[#27272A]/50 hover:bg-[#27272A] text-[#E4E4E7] text-xs font-medium rounded-xl border border-dashed border-[#27272A] transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Set
-                    </button>
-                  </div>
-                ))
-              )}
-
-              {/* Action Buttons Footer */}
-              <div className="flex flex-col sm:flex-row items-center gap-3 pt-4">
+              {[60, 90, 120, 180].map((s) => (
                 <button
-                  onClick={() => openExercisePicker(null)}
-                  className="w-full sm:flex-1 py-3 bg-[#27272A] hover:bg-[#323236] text-[#E4E4E7] font-semibold text-xs sm:text-sm rounded-xl border border-[#323236] transition-colors flex items-center justify-center gap-2"
+                  key={s}
+                  type="button"
+                  onClick={() => setRestDuration(s)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    restDuration === s
+                      ? 'bg-brand text-bg-base'
+                      : 'bg-bg-elevated text-text-muted hover:text-text-main'
+                  }`}
                 >
-                  <Plus className="w-4 h-4 text-[#C4A574]" />
-                  Add Exercise
+                  {s >= 60 ? `${s / 60}m` : `${s}s`}
                 </button>
-
-                {workoutExercises.length > 0 && (
-                  <button
-                    onClick={() => setIsSaveTemplateOpen(true)}
-                    className="w-full sm:w-auto px-5 py-3 bg-[#18181A] hover:bg-[#27272A] text-[#C4A574] font-semibold text-xs sm:text-sm rounded-xl border border-[#27272A] transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    Save as Routine Template
-                  </button>
-                )}
-              </div>
+              ))}
             </div>
           </div>
-        )}
-      </main>
 
-      {/* SEARCHABLE EXERCISE PICKER MODAL */}
-      {isPickerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#18181A] border border-[#27272A] rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-[#27272A] flex items-center justify-between">
-              <h3 className="font-bold text-lg text-[#E4E4E7]">
-                {pickerSwapIndex !== null ? 'Swap Exercise' : 'Select Exercise'}
-              </h3>
-              <button
-                onClick={() => setIsPickerOpen(false)}
-                className="text-[#A1A1AA] hover:text-[#E4E4E7] p-1 rounded-lg hover:bg-[#27272A]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Search & Category Filters */}
-            <div className="p-4 border-b border-[#27272A] space-y-3 bg-[#0F0F10]/50">
-              <div className="relative">
-                <Search className="w-4 h-4 text-[#A1A1AA] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search exercise by name or muscle (e.g. Bench Press, Chest)..."
-                  value={pickerSearch}
-                  onChange={(e) => setPickerSearch(e.target.value)}
-                  className="w-full bg-[#18181A] border border-[#27272A] focus:border-[#C4A574] text-sm text-[#E4E4E7] pl-10 pr-4 py-2.5 rounded-xl outline-none"
-                />
-              </div>
-
-              {/* Category Pills */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {CATEGORIES.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setPickerCategory(cat)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-                      pickerCategory === cat
-                        ? 'bg-[#C4A574] text-black font-semibold'
-                        : 'bg-[#27272A] text-[#A1A1AA] hover:text-[#E4E4E7]'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Exercise List */}
-            <div className="p-4 overflow-y-auto space-y-2 flex-1 divide-y divide-[#27272A]/40">
-              {filteredExercises.length === 0 ? (
-                <div className="text-center py-10 text-[#A1A1AA] text-sm">
-                  No exercises matched your search terms.
-                </div>
-              ) : (
-                filteredExercises.map((ex) => (
-                  <div
-                    key={ex._id}
-                    onClick={() => handleSelectExerciseFromPicker(ex)}
-                    className="pt-2.5 pb-2.5 first:pt-0 hover:bg-[#27272A]/40 px-3 rounded-xl cursor-pointer transition-colors flex items-center justify-between group"
-                  >
-                    <div>
-                      <h4 className="font-semibold text-sm text-[#E4E4E7] group-hover:text-[#C4A574] transition-colors">
-                        {ex.name}
-                      </h4>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] text-[#A1A1AA] capitalize">{ex.category}</span>
-                        {ex.targetMuscles?.length > 0 && (
-                          <>
-                            <span className="text-[10px] text-[#A1A1AA]">•</span>
-                            <span className="text-[11px] text-[#C4A574]/80">
-                              {ex.targetMuscles.join(', ')}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <ChevronRight className="w-4 h-4 text-[#A1A1AA] group-hover:text-[#C4A574] transition-colors" />
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SAVE ROUTINE TEMPLATE MODAL */}
-      {isSaveTemplateOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#18181A] border border-[#27272A] rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-lg text-[#E4E4E7]">Save as Routine Template</h3>
-              <button
-                onClick={() => setIsSaveTemplateOpen(false)}
-                className="text-[#A1A1AA] hover:text-[#E4E4E7]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveAsTemplate} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-[#A1A1AA] mb-1.5">
-                  Template Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Upper Body Power A"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  className="w-full bg-[#0F0F10] border border-[#27272A] focus:border-[#C4A574] text-sm text-[#E4E4E7] px-4 py-2.5 rounded-xl outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
+          {exercises.map((exercise, exIndex) => (
+            <div
+              key={exIndex}
+              className="bg-bg-surface rounded-3xl p-5 border border-border-subtle shadow-lg relative"
+            >
+              {exercises.length > 1 && (
                 <button
                   type="button"
-                  onClick={() => setIsSaveTemplateOpen(false)}
-                  className="px-4 py-2 text-xs text-[#A1A1AA] hover:text-[#E4E4E7]"
+                  onClick={() => removeExercise(exIndex)}
+                  className="absolute top-4 right-4 text-[10px] font-bold text-text-dim hover:text-accent-rose bg-bg-elevated hover:bg-accent-rose/10 px-2.5 py-1 rounded-lg transition-colors z-10 flex items-center gap-1"
                 >
-                  Cancel
+                  <X size={11} strokeWidth={2.5} />
+                  Remove
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSavingTemplate}
-                  className="px-5 py-2 text-xs font-semibold text-black bg-[#C4A574] hover:bg-[#D4B886] rounded-xl transition-colors disabled:opacity-50"
-                >
-                  {isSavingTemplate ? 'Saving...' : 'Save Routine'}
-                </button>
+              )}
+
+              {/* Exercise name + swap */}
+              <div className="mb-5 pr-16">
+                {swappingIndex === exIndex || !exercise.exerciseName ? (
+                  <select
+                    value={exercise.exerciseName}
+                    onChange={(e) => handleExerciseChange(e.target.value, exIndex)}
+                    className="w-full bg-transparent text-brand text-lg font-bold focus:outline-none border-b border-border-subtle pb-2 appearance-none"
+                    autoFocus={swappingIndex === exIndex}
+                  >
+                    <option value="" disabled>
+                      Choose an exercise...
+                    </option>
+                    {Object.keys(dbExercises).map((category) => (
+                      <optgroup
+                        key={category}
+                        label={`--- ${category.toUpperCase()} ---`}
+                        className="bg-bg-elevated text-text-muted font-bold"
+                      >
+                        {dbExercises[category].map((ex) => (
+                          <option
+                            key={ex._id}
+                            value={ex.name}
+                            className="text-text-main bg-bg-surface"
+                          >
+                            {ex.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex items-center gap-3 border-b border-border-subtle pb-2">
+                    <p className="text-brand text-lg font-bold flex-1 truncate">
+                      {exercise.exerciseName}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSwappingIndex(exIndex)}
+                      className="text-[10px] font-bold text-text-muted hover:text-brand bg-bg-elevated hover:bg-brand/10 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shrink-0"
+                      title="Swap exercise — keeps your sets"
+                    >
+                      <ArrowLeftRight size={12} />
+                      Swap
+                    </button>
+                  </div>
+                )}
               </div>
-            </form>
+
+              {/* Column headers */}
+              <div className="flex gap-2 px-1 mb-2 text-[10px] font-bold text-text-dim tracking-wider">
+                <div className="w-9 text-center">SET</div>
+                <div className="w-9 text-center">DONE</div>
+                <div className="flex-1 text-center">KG</div>
+                <div className="flex-1 text-center">REPS</div>
+                <div className="w-8" />
+              </div>
+
+              <div className="space-y-2 mb-4">
+                {exercise.sets.map((set, setIndex) => (
+                  <div
+                    key={setIndex}
+                    className={`flex gap-2 items-center px-1 py-1.5 rounded-xl transition-all ${
+                      set.completed ? 'bg-accent-emerald/5 opacity-60' : 'hover:bg-bg-elevated/60'
+                    }`}
+                  >
+                    <div className="w-9 text-center font-bold text-brand bg-brand/10 rounded-lg py-2 text-sm">
+                      {setIndex + 1}
+                    </div>
+
+                    {/* Completion check */}
+                    <button
+                      type="button"
+                      onClick={() => toggleSetComplete(exIndex, setIndex)}
+                      className={`w-9 h-9 flex items-center justify-center rounded-lg border transition-all ${
+                        set.completed
+                          ? 'bg-accent-emerald/20 border-accent-emerald/40 text-accent-emerald'
+                          : 'bg-bg-elevated border-border-subtle text-text-dim hover:border-brand/40'
+                      }`}
+                      title={set.completed ? 'Mark incomplete' : 'Mark complete & start rest'}
+                    >
+                      <Check size={16} strokeWidth={2.5} />
+                    </button>
+
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.5"
+                      value={set.weight}
+                      onChange={(e) =>
+                        handleSetChange(e.target.value, 'weight', exIndex, setIndex)
+                      }
+                      disabled={set.completed}
+                      className="flex-1 min-w-0 bg-bg-elevated text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all border border-border-subtle text-text-main disabled:opacity-50"
+                    />
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      step="1"
+                      value={set.reps}
+                      onChange={(e) =>
+                        handleSetChange(e.target.value, 'reps', exIndex, setIndex)
+                      }
+                      disabled={set.completed}
+                      className="flex-1 min-w-0 bg-bg-elevated text-center font-bold text-lg rounded-xl py-2 focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all border border-border-subtle text-text-main disabled:opacity-50"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => removeSet(exIndex, setIndex)}
+                      className="w-8 h-8 flex items-center justify-center text-text-dim hover:text-accent-rose hover:bg-accent-rose/10 rounded-lg transition-colors"
+                      title="Delete set"
+                    >
+                      <X size={14} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => addSet(exIndex)}
+                className="w-full py-2.5 rounded-xl text-sm font-bold text-text-muted bg-bg-elevated hover:bg-bg-subtle hover:text-text-main transition-all flex items-center justify-center gap-2 border border-border-subtle"
+              >
+                <Plus size={14} strokeWidth={2.5} />
+                Add Set
+              </button>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={addExercise}
+            className="w-full py-4 rounded-2xl text-brand font-bold bg-brand/10 hover:bg-brand/15 transition-all border border-brand/20 flex items-center justify-center gap-2"
+          >
+            <Plus size={18} strokeWidth={2.5} />
+            Add Another Exercise
+          </button>
+
+          <div className="pt-2 space-y-3">
+            <button
+              type="submit"
+              className="w-full bg-brand hover:bg-brand-hover text-bg-base py-4 rounded-2xl font-extrabold text-lg shadow-[0_0_20px_rgba(196,165,116,0.2)] active:scale-[0.98] transition-all"
+            >
+              Finish & Log Workout
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAsTemplate}
+              className="w-full bg-bg-surface text-text-muted py-3 rounded-2xl font-bold text-sm hover:bg-bg-elevated hover:text-text-main transition-all border border-border-subtle flex items-center justify-center gap-2"
+            >
+              <Save size={15} strokeWidth={2} />
+              Save as Custom Template
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Floating Rest Timer */}
+      {isResting && (
+        <div className="fixed bottom-0 left-0 right-0 z-[60] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="max-w-2xl mx-auto bg-bg-surface border border-brand/30 rounded-2xl px-5 py-4 shadow-2xl flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full border-2 border-brand flex items-center justify-center shrink-0">
+              <span className="text-brand font-mono font-black text-sm">
+                {formatTime(restSecondsLeft)}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-brand uppercase tracking-wider">Rest Timer</p>
+              <p className="text-xs text-text-muted truncate">Recover before your next set</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => addRestTime(15)}
+              className="px-3 py-2 rounded-xl text-xs font-bold bg-bg-elevated text-text-muted hover:text-text-main border border-border-subtle"
+            >
+              +15s
+            </button>
+            <button
+              type="button"
+              onClick={skipRest}
+              className="px-3 py-2 rounded-xl text-xs font-bold bg-brand text-bg-base flex items-center gap-1"
+            >
+              <SkipForward size={12} /> Skip
+            </button>
           </div>
         </div>
       )}
