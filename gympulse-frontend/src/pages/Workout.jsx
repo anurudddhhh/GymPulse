@@ -10,6 +10,8 @@ import {
 
 const DEFAULT_REST_SECONDS = 90;
 const DRAFT_STORAGE_KEY = 'gympulse_active_workout_draft';
+const CACHE_TEMPLATES_KEY = 'gympulse_cached_templates';
+const CACHE_EXERCISES_KEY = 'gympulse_cached_exercises';
 const CATEGORIES = ['All', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Cardio'];
 
 export default function Workout() {
@@ -20,14 +22,52 @@ export default function Workout() {
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
 
+  // Timestamps for background sleep tracking
+  const [workoutStartTime, setWorkoutStartTime] = useState(null);
+  const [restEndTime, setRestEndTime] = useState(null);
+
   // Each set: { weight, reps, completed }
   const [exercises, setExercises] = useState([
     { exerciseName: '', sets: [{ weight: '', reps: '', completed: false }] }
   ]);
 
-  const [dbExercises, setDbExercises] = useState({});
-  const [rawExercisesList, setRawExercisesList] = useState([]);
-  const [dbTemplates, setDbTemplates] = useState([]);
+  // STALE-WHILE-REVALIDATE: Initialize state directly from local cache (0ms instant render)
+  const [dbTemplates, setDbTemplates] = useState(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_TEMPLATES_KEY);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [rawExercisesList, setRawExercisesList] = useState(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_EXERCISES_KEY);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [dbExercises, setDbExercises] = useState(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_EXERCISES_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return parsed.reduce((acc, curr) => {
+          if (!acc[curr.category]) acc[curr.category] = [];
+          acc[curr.category].push(curr);
+          return acc;
+        }, {});
+      }
+      return {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [isTemplatesLoading, setIsTemplatesLoading] = useState(() => dbTemplates.length === 0);
 
   // Rest timer
   const [restSecondsLeft, setRestSecondsLeft] = useState(0);
@@ -44,7 +84,7 @@ export default function Workout() {
   const [pickerSearch, setPickerSearch] = useState('');
   const [pickerCategory, setPickerCategory] = useState('All');
 
-  // 1. AUTO-RESTORE DRAFT ON MOUNT (If page reloaded during an active session)
+  // 1. AUTO-RESTORE DRAFT ON MOUNT
   useEffect(() => {
     try {
       const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
@@ -53,9 +93,19 @@ export default function Workout() {
         if (draft && draft.isWorkoutActive) {
           setWorkoutName(draft.workoutName || '');
           setDate(draft.date || new Date().toISOString().split('T')[0]);
-          setTimeElapsed(draft.timeElapsed || 0);
           setExercises(draft.exercises || []);
           setIsWorkoutActive(true);
+
+          const savedStartTime = draft.workoutStartTime || (Date.now() - (draft.timeElapsed || 0) * 1000);
+          setWorkoutStartTime(savedStartTime);
+          setTimeElapsed(Math.floor((Date.now() - savedStartTime) / 1000));
+
+          if (draft.restEndTime && draft.restEndTime > Date.now()) {
+            setRestEndTime(draft.restEndTime);
+            setRestSecondsLeft(Math.ceil((draft.restEndTime - Date.now()) / 1000));
+            setIsResting(true);
+          }
+
           toast.success('Active workout session restored!');
         }
       }
@@ -64,26 +114,28 @@ export default function Workout() {
     }
   }, []);
 
-  // 2. AUTO-SAVE DRAFT TO LOCALSTORAGE WHENEVER STATE CHANGES
+  // 2. AUTO-SAVE DRAFT TO LOCALSTORAGE
   useEffect(() => {
     if (isWorkoutActive) {
       const draftPayload = {
         workoutName,
         date,
         timeElapsed,
+        workoutStartTime,
+        restEndTime,
         exercises,
         isWorkoutActive: true
       };
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
     }
-  }, [workoutName, date, timeElapsed, exercises, isWorkoutActive]);
+  }, [workoutName, date, timeElapsed, workoutStartTime, restEndTime, exercises, isWorkoutActive]);
 
-  // 3. BROWSER UNLOAD WARNING (Warn user if they attempt to refresh or close tab)
+  // 3. BROWSER UNLOAD WARNING
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (isWorkoutActive) {
         e.preventDefault();
-        e.returnValue = ''; // Required for browser system dialog to trigger
+        e.returnValue = '';
       }
     };
 
@@ -97,16 +149,26 @@ export default function Workout() {
     return () => { if (setHideNav) setHideNav(false); };
   }, [isWorkoutActive, setHideNav]);
 
-  // Load library
+  // 4. DECOUPLED BACKGROUND DATA REVALIDATION
   useEffect(() => {
-    const fetchLibraryData = async () => {
-      try {
-        const [exerciseRes, templateRes] = await Promise.all([
-          api.get('/api/exercises'),
-          api.get('/api/templates')
-        ]);
-        
-        const exerciseData = exerciseRes.data || [];
+    // Fetch Templates independently for fast rendering
+    api.get('/api/templates')
+      .then((res) => {
+        const templatesData = res.data || [];
+        setDbTemplates(templatesData);
+        localStorage.setItem(CACHE_TEMPLATES_KEY, JSON.stringify(templatesData));
+      })
+      .catch((err) => {
+        console.error('Failed to refresh templates', err);
+      })
+      .finally(() => {
+        setIsTemplatesLoading(false);
+      });
+
+    // Fetch Exercise Library independently without blocking templates
+    api.get('/api/exercises')
+      .then((res) => {
+        const exerciseData = res.data || [];
         setRawExercisesList(exerciseData);
 
         const grouped = exerciseData.reduce((acc, curr) => {
@@ -115,31 +177,71 @@ export default function Workout() {
           return acc;
         }, {});
         setDbExercises(grouped);
-        setDbTemplates(templateRes.data || []);
-      } catch (err) {
-        toast.error('Failed to load exercise library');
-        console.error(err);
-      }
-    };
-    fetchLibraryData();
+
+        localStorage.setItem(CACHE_EXERCISES_KEY, JSON.stringify(exerciseData));
+      })
+      .catch((err) => {
+        console.error('Failed to refresh exercise library', err);
+      });
   }, []);
 
-  // Session stopwatch
+  // 5. TIMESTAMP STOPWATCH (Survives device sleep/lock)
   useEffect(() => {
-    if (!isWorkoutActive) return;
-    const timer = setInterval(() => setTimeElapsed((p) => p + 1), 1000);
-    return () => clearInterval(timer);
-  }, [isWorkoutActive]);
+    if (!isWorkoutActive || !workoutStartTime) return;
 
-  // Rest countdown
+    const updateTimer = () => {
+      const seconds = Math.floor((Date.now() - workoutStartTime) / 1000);
+      setTimeElapsed(Math.max(0, seconds));
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        updateTimer();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isWorkoutActive, workoutStartTime]);
+
+  // 6. TIMESTAMP REST COUNTDOWN (Survives device sleep/lock)
   useEffect(() => {
-    if (!isResting || restSecondsLeft <= 0) {
-      if (restSecondsLeft <= 0 && isResting) setIsResting(false);
-      return;
-    }
-    const t = setInterval(() => setRestSecondsLeft((p) => p - 1), 1000);
-    return () => clearInterval(t);
-  }, [isResting, restSecondsLeft]);
+    if (!isResting || !restEndTime) return;
+
+    const updateRestTimer = () => {
+      const remaining = Math.ceil((restEndTime - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setRestSecondsLeft(0);
+        setIsResting(false);
+        setRestEndTime(null);
+      } else {
+        setRestSecondsLeft(remaining);
+      }
+    };
+
+    updateRestTimer();
+    const interval = setInterval(updateRestTimer, 1000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        updateRestTimer();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isResting, restEndTime]);
 
   const formatTime = (totalSeconds) => {
     const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -148,6 +250,8 @@ export default function Workout() {
   };
 
   const startRest = useCallback(() => {
+    const targetEnd = Date.now() + restDuration * 1000;
+    setRestEndTime(targetEnd);
     setRestSecondsLeft(restDuration);
     setIsResting(true);
   }, [restDuration]);
@@ -155,18 +259,20 @@ export default function Workout() {
   const skipRest = () => {
     setIsResting(false);
     setRestSecondsLeft(0);
+    setRestEndTime(null);
   };
 
   const addRestTime = (secs) => {
-    setRestSecondsLeft((p) => p + secs);
+    const newEndTime = (restEndTime || Date.now()) + secs * 1000;
+    setRestEndTime(newEndTime);
+    setRestSecondsLeft(Math.ceil((newEndTime - Date.now()) / 1000));
   };
 
-  // Clear Draft Helper
   const clearDraft = () => {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
   };
 
-  // --- Search Picker Modal Controls ---
+  // Search Picker Modal Controls
   const openExercisePicker = (exerciseIndex) => {
     setPickerTargetIndex(exerciseIndex);
     setPickerSearch('');
@@ -186,6 +292,9 @@ export default function Workout() {
 
   // --- Start workout ---
   const startWorkout = async (templateId) => {
+    const now = Date.now();
+    setWorkoutStartTime(now);
+
     if (templateId) {
       const selectedTemplate = dbTemplates.find((t) => t._id === templateId);
       if (!selectedTemplate) return;
@@ -230,6 +339,7 @@ export default function Workout() {
     setTimeElapsed(0);
     setIsResting(false);
     setRestSecondsLeft(0);
+    setRestEndTime(null);
     setIsWorkoutActive(true);
   };
 
@@ -239,7 +349,9 @@ export default function Workout() {
     setIsDeleting(true);
     try {
       await api.delete(`/api/templates/${deleteTargetId}`);
-      setDbTemplates((prev) => prev.filter((t) => t._id !== deleteTargetId));
+      const updatedTemplates = dbTemplates.filter((t) => t._id !== deleteTargetId);
+      setDbTemplates(updatedTemplates);
+      localStorage.setItem(CACHE_TEMPLATES_KEY, JSON.stringify(updatedTemplates));
       toast.success('Template deleted');
       setDeleteTargetId(null);
     } catch {
@@ -313,7 +425,10 @@ export default function Workout() {
         templateName: workoutName,
         exercises: templateExercises,
       });
-      setDbTemplates([...dbTemplates, res.data]);
+
+      const updatedTemplates = [...dbTemplates, res.data];
+      setDbTemplates(updatedTemplates);
+      localStorage.setItem(CACHE_TEMPLATES_KEY, JSON.stringify(updatedTemplates));
       toast.success(`Template "${workoutName}" saved`, { id: toastId });
     } catch {
       toast.error('Failed to save template', { id: toastId });
@@ -351,21 +466,25 @@ export default function Workout() {
         exercises: cleanedExercises,
       });
       
-      clearDraft(); // Clean up localStorage draft after successful save
+      clearDraft();
       toast.success('Workout logged!', { id: toastId });
       setIsWorkoutActive(false);
       setIsResting(false);
+      setWorkoutStartTime(null);
+      setRestEndTime(null);
     } catch {
       toast.error('Failed to save workout', { id: toastId });
     }
   };
 
   const handleCancelWorkout = () => {
-    clearDraft(); // Clean up localStorage draft upon explicit cancel
+    clearDraft();
     setIsWorkoutActive(false);
     setTimeElapsed(0);
     setIsResting(false);
     setRestSecondsLeft(0);
+    setWorkoutStartTime(null);
+    setRestEndTime(null);
     setWorkoutName('');
     setExercises([{ exerciseName: '', sets: [{ weight: '', reps: '', completed: false }] }]);
   };
@@ -409,7 +528,18 @@ export default function Workout() {
             Start Empty Workout
           </button>
 
-          {systemTemplates.length > 0 && (
+          {/* SKELETON PULSE LOADING STATE (Displays only on fresh cache load) */}
+          {isTemplatesLoading && (
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <div className="h-3 w-28 bg-bg-surface rounded animate-pulse" />
+                <div className="h-16 w-full bg-bg-surface border border-border-subtle rounded-2xl animate-pulse" />
+                <div className="h-16 w-full bg-bg-surface border border-border-subtle rounded-2xl animate-pulse" />
+              </div>
+            </div>
+          )}
+
+          {!isTemplatesLoading && systemTemplates.length > 0 && (
             <div className="mb-8">
               <h2 className="text-[10px] font-bold text-text-dim tracking-wider uppercase mb-3 px-1">
                 System Templates
@@ -443,7 +573,7 @@ export default function Workout() {
             </div>
           )}
 
-          {customTemplates.length > 0 && (
+          {!isTemplatesLoading && customTemplates.length > 0 && (
             <div className="mb-8">
               <h2 className="text-[10px] font-bold text-text-dim tracking-wider uppercase mb-3 px-1">
                 Your Blueprints
@@ -481,7 +611,7 @@ export default function Workout() {
             </div>
           )}
 
-          {dbTemplates.length === 0 && (
+          {!isTemplatesLoading && dbTemplates.length === 0 && (
             <div className="text-center py-12 bg-bg-surface rounded-3xl border border-border-subtle">
               <Dumbbell size={32} className="text-text-dim mx-auto mb-3" strokeWidth={1.2} />
               <p className="text-text-muted font-medium text-sm">
@@ -732,7 +862,6 @@ export default function Workout() {
       {isPickerOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-bg-surface border border-border-subtle rounded-3xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
-            {/* Header */}
             <div className="p-4 sm:p-5 border-b border-border-subtle flex items-center justify-between">
               <h3 className="font-extrabold text-lg text-text-main">Select Exercise</h3>
               <button
@@ -744,7 +873,6 @@ export default function Workout() {
               </button>
             </div>
 
-            {/* Search Input & Category Pills */}
             <div className="p-4 border-b border-border-subtle space-y-3 bg-bg-base/50">
               <div className="relative">
                 <Search size={16} className="text-text-dim absolute left-4 top-1/2 -translate-y-1/2" />
@@ -776,7 +904,6 @@ export default function Workout() {
               </div>
             </div>
 
-            {/* Exercise List */}
             <div className="p-3 overflow-y-auto space-y-1 flex-1">
               {filteredExercises.length === 0 ? (
                 <div className="text-center py-10 text-text-dim text-sm font-medium">
