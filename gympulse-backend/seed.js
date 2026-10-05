@@ -49,9 +49,21 @@ const exercises = [
     primaryMuscles: ['Upper Pectoralis Major'],
     secondaryMuscles: ['Anterior Deltoids', 'Triceps Brachii'],
     formCues: [
-      'Keep bench set to 30 degrees to avoid over-engaging shoulders.',
+      'Set bench to 30 degrees to avoid over-engaging shoulders.',
       'Pause briefly at the bottom stretch position.',
       'Squeeze upper chest at top of press.'
+    ]
+  },
+  {
+    name: 'Incline Dumbbell Fly',
+    category: 'Chest',
+    description: 'Upper chest isolation movement providing continuous stretch across the upper pectorals.',
+    primaryMuscles: ['Upper Pectoralis Major'],
+    secondaryMuscles: ['Anterior Deltoids'],
+    formCues: [
+      'Keep elbows slightly bent throughout movement.',
+      'Lower dumbbells in wide arc until deep chest stretch is felt.',
+      'Squeeze upper chest to bring dumbbells together.'
     ]
   },
   {
@@ -103,6 +115,18 @@ const exercises = [
     ]
   },
   {
+    name: 'Low-to-High Cable Fly',
+    category: 'Chest',
+    description: 'Bottom-up cable fly targeting the clavicular head (upper chest).',
+    primaryMuscles: ['Upper Pectoralis Major'],
+    secondaryMuscles: ['Anterior Deltoids'],
+    formCues: [
+      'Set pulleys to lowest position.',
+      'Bring handles up and together in front of upper chest level.',
+      'Squeeze upper chest at top for 1 second.'
+    ]
+  },
+  {
     name: 'Push-ups',
     category: 'Chest',
     description: 'Fundamental bodyweight pressing movement for chest, core, and shoulder endurance.',
@@ -124,18 +148,6 @@ const exercises = [
       'Lean torso forward roughly 30 degrees.',
       'Flare elbows slightly outward during descent.',
       'Lower until shoulders are below elbows, then press up.'
-    ]
-  },
-  {
-    name: 'Dumbbell Pullover',
-    category: 'Chest',
-    description: 'Overhead extension targeting chest stretch and serratus wall.',
-    primaryMuscles: ['Pectoralis Major', 'Latissimus Dorsi'],
-    secondaryMuscles: ['Serratus Anterior', 'Triceps (Long Head)'],
-    formCues: [
-      'Rest upper back perpendicular across bench.',
-      'Hold single dumbbell overhead with elbows soft.',
-      'Lower weight behind head until deep ribcage stretch is felt.'
     ]
   },
   {
@@ -193,11 +205,23 @@ const exercises = [
     category: 'Back',
     description: 'Vertical pulling cable exercise building upper back width and lat muscle mass.',
     primaryMuscles: ['Latissimus Dorsi'],
-    secondaryMuscles: ['Biceps Brachii', 'Rear Deltoids', 'Brachialis'],
+    secondaryMuscles: ['Biceps Brachii', 'Rear Deltoids'],
     formCues: [
       'Grip bar slightly wider than shoulder-width.',
       'Pull bar down toward upper chest while driving elbows down.',
       'Avoid leaning backward excessively.'
+    ]
+  },
+  {
+    name: 'Close-Grip Lat Pulldown',
+    category: 'Back',
+    description: 'Neutral or narrow-grip vertical pull maximizing lower lat stretch and range.',
+    primaryMuscles: ['Latissimus Dorsi'],
+    secondaryMuscles: ['Biceps Brachii', 'Brachialis'],
+    formCues: [
+      'Attach V-bar or neutral grip handles to pulldown.',
+      'Pull handle to upper sternum keeping elbows close to body.',
+      'Control return to full overhead arm stretch.'
     ]
   },
   {
@@ -237,6 +261,18 @@ const exercises = [
     ]
   },
   {
+    name: 'Single-Arm Cable Row',
+    category: 'Back',
+    description: 'Unilateral cable row allowing maximum lat contraction and rotation freedom.',
+    primaryMuscles: ['Latissimus Dorsi'],
+    secondaryMuscles: ['Rhomboids', 'Obliques'],
+    formCues: [
+      'Pull handle directly toward hip.',
+      'Squeeze lat hard at peak contraction.',
+      'Allow shoulder blade to wrap around ribcage on return stretch.'
+    ]
+  },
+  {
     name: 'T-Bar Row',
     category: 'Back',
     description: 'Heavy landmine or machine row for upper back density and thickness.',
@@ -268,6 +304,18 @@ const exercises = [
       'Soft bend in elbows with wrists firm.',
       'Pull cable bar in arc down to thighs.',
       'Pause and squeeze lats at bottom.'
+    ]
+  },
+  {
+    name: 'Back Extension (Hyperextension)',
+    category: 'Back',
+    description: 'Lower back and posterior chain builder targeting erector spinae.',
+    primaryMuscles: ['Erector Spinae'],
+    secondaryMuscles: ['Gluteus Maximus', 'Hamstrings'],
+    formCues: [
+      'Set pad just below hip crease.',
+      'Hinge at waist and lower upper body.',
+      'Raise torso until body forms straight line (do not over-arch).'
     ]
   },
 
@@ -309,6 +357,17 @@ const exercises = [
     ]
   },
   {
+    name: 'Machine Shoulder Press',
+    category: 'Shoulders',
+    description: 'Guided overhead press machine isolating shoulder muscles safely.',
+    primaryMuscles: ['Anterior Deltoids'],
+    secondaryMuscles: ['Triceps Brachii'],
+    formCues: [
+      'Adjust seat so handles are at ear level.',
+      'Press handles overhead without arching lower back.'
+    ]
+  },
+  {
     name: 'Dumbbell Lateral Raise',
     category: 'Shoulders',
     description: 'Key isolation movement for building wide lateral deltoids and shoulder width.',
@@ -330,6 +389,29 @@ const exercises = [
       'Set pulley to lowest height.',
       'Raise cable across body to shoulder level.',
       'Lower slowly against cable tension.'
+    ]
+  },
+  {
+    name: 'Machine Lateral Raise',
+    category: 'Shoulders',
+    description: 'Isolated lateral deltoid machine keeping constant tension without wrist strain.',
+    primaryMuscles: ['Lateral Deltoids'],
+    secondaryMuscles: [],
+    formCues: [
+      'Sit firm against pad with elbows against pads.',
+      'Raise elbows to shoulder height in controlled motion.'
+    ]
+  },
+  {
+    name: 'Dumbbell Front Raise',
+    category: 'Shoulders',
+    description: 'Anterior deltoid isolation lifting dumbbells in front of body.',
+    primaryMuscles: ['Anterior Deltoids'],
+    secondaryMuscles: ['Upper Chest'],
+    formCues: [
+      'Hold dumbbells in front of thighs.',
+      'Raise one or both arms forward to eye level.',
+      'Control lowering phase.'
     ]
   },
   {
@@ -356,6 +438,30 @@ const exercises = [
       'Avoid shrugging shoulders up.'
     ]
   },
+  {
+    name: 'Barbell Shrugs',
+    category: 'Shoulders',
+    description: 'Heavy upper trapezius builder pulling shoulders directly upward.',
+    primaryMuscles: ['Upper Trapezius'],
+    secondaryMuscles: ['Forearms'],
+    formCues: [
+      'Hold barbell in front of thighs with overhand grip.',
+      'Elevate shoulders straight up toward ears.',
+      'Pause at top contraction; do not roll shoulders.'
+    ]
+  },
+  {
+    name: 'Dumbbell Shrugs',
+    category: 'Shoulders',
+    description: 'Upper trap builder using dumbbells at sides for comfortable wrist alignment.',
+    primaryMuscles: ['Upper Trapezius'],
+    secondaryMuscles: ['Forearms'],
+    formCues: [
+      'Hold dumbbells at sides.',
+      'Shrug shoulders up toward ears.',
+      'Squeeze top contraction for 1 second.'
+    ]
+  },
 
   // BICEPS
   {
@@ -371,6 +477,18 @@ const exercises = [
     ]
   },
   {
+    name: 'EZ-Bar Curl',
+    category: 'Biceps',
+    description: 'Bicep curl using an angled EZ bar to reduce wrist and forearm discomfort.',
+    primaryMuscles: ['Biceps Brachii'],
+    secondaryMuscles: ['Brachialis'],
+    formCues: [
+      'Grip angled ridges on EZ bar.',
+      'Keep upper arms stationary and curl to shoulders.',
+      'Lower bar fully under control.'
+    ]
+  },
+  {
     name: 'Dumbbell Alternate Bicep Curl',
     category: 'Biceps',
     description: 'Alternating dumbbell curl allowing focused unilateral bicep contraction.',
@@ -380,6 +498,18 @@ const exercises = [
       'Start with dumbbells at sides in neutral grip.',
       'Supinate wrist (rotate palm up) as dumbbell lifts.',
       'Alternate arms smoothly.'
+    ]
+  },
+  {
+    name: 'Incline Dumbbell Curl',
+    category: 'Biceps',
+    description: 'Seated incline curl placing bicep long head under maximum deep stretch.',
+    primaryMuscles: ['Biceps Brachii (Long Head)'],
+    secondaryMuscles: ['Brachialis'],
+    formCues: [
+      'Set bench to 45–60 degrees.',
+      'Let arms hang fully behind torso.',
+      'Curl dumbbells without pulling elbows forward.'
     ]
   },
   {
@@ -395,6 +525,18 @@ const exercises = [
     ]
   },
   {
+    name: 'Cable Hammer Curl (Rope)',
+    category: 'Biceps',
+    description: 'Constant-tension rope hammer curl targeting brachialis and forearms.',
+    primaryMuscles: ['Brachialis', 'Brachioradialis'],
+    secondaryMuscles: ['Biceps Brachii'],
+    formCues: [
+      'Attach rope to low pulley.',
+      'Keep neutral thumbs-up grip.',
+      'Curl rope to chest level and split ends slightly.'
+    ]
+  },
+  {
     name: 'Preacher Curl',
     category: 'Biceps',
     description: 'Bench-supported curl eliminating momentum for strict bicep isolation.',
@@ -404,6 +546,18 @@ const exercises = [
       'Upper arms rested firm on preacher pad.',
       'Lower bar fully until arm is nearly extended.',
       'Curl up toward face without lifting elbows off pad.'
+    ]
+  },
+  {
+    name: 'Concentration Curl',
+    category: 'Biceps',
+    description: 'Seated single-arm curl bracing elbow against inner thigh for peak contraction.',
+    primaryMuscles: ['Biceps Brachii'],
+    secondaryMuscles: ['Brachialis'],
+    formCues: [
+      'Sit on bench and brace tricep against inner thigh.',
+      'Curl dumbbell toward chest.',
+      'Squeeze bicep hard at peak contraction.'
     ]
   },
 
@@ -421,6 +575,18 @@ const exercises = [
     ]
   },
   {
+    name: 'Straight Bar Tricep Pushdown',
+    category: 'Triceps',
+    description: 'Heavy cable pushdown using straight bar for raw tricep extension strength.',
+    primaryMuscles: ['Triceps Brachii'],
+    secondaryMuscles: ['Forearms'],
+    formCues: [
+      'Overhand grip on straight bar.',
+      'Press bar straight down to thighs.',
+      'Keep elbows pinned to sides.'
+    ]
+  },
+  {
     name: 'Skull Crushers',
     category: 'Triceps',
     description: 'Lying tricep extension targeting the long head of the triceps.',
@@ -433,15 +599,87 @@ const exercises = [
     ]
   },
   {
-    name: 'Overhead Tricep Extension',
+    name: 'Overhead Tricep Extension (Dumbbell)',
     category: 'Triceps',
     description: 'Overhead extension placing tricep long head under maximum deep stretch.',
     primaryMuscles: ['Triceps Brachii (Long Head)'],
     secondaryMuscles: ['Forearms'],
     formCues: [
-      'Hold dumbbell or cable overhead with palms under plate.',
+      'Hold dumbbell overhead with both hands under top plate.',
       'Lower weight behind head with elbows pointed forward.',
       'Press straight up to lockout.'
+    ]
+  },
+  {
+    name: 'Overhead Cable Tricep Extension',
+    category: 'Triceps',
+    description: 'Cable-based overhead extension providing constant deep stretch on long head.',
+    primaryMuscles: ['Triceps Brachii (Long Head)'],
+    secondaryMuscles: [],
+    formCues: [
+      'Attach rope to mid-cable pulley, face away from stack.',
+      'Extend rope forward overhead.',
+      'Control stretch phase behind head.'
+    ]
+  },
+  {
+    name: 'Close-Grip Bench Press',
+    category: 'Triceps',
+    description: 'Heavy compound pressing variation overloading triceps with shoulder-width grip.',
+    primaryMuscles: ['Triceps Brachii'],
+    secondaryMuscles: ['Pectoralis Major', 'Anterior Deltoids'],
+    formCues: [
+      'Grip barbell shoulder-width apart.',
+      'Lower bar to lower sternum keeping elbows tucked close.',
+      'Drive bar up using tricep power.'
+    ]
+  },
+  {
+    name: 'Tricep Dips',
+    category: 'Triceps',
+    description: 'Upright bodyweight dip focusing load on triceps.',
+    primaryMuscles: ['Triceps Brachii'],
+    secondaryMuscles: ['Anterior Deltoids', 'Chest'],
+    formCues: [
+      'Keep torso upright (vertical) throughout dip.',
+      'Tuck elbows in close to body.',
+      'Lower to 90 degrees and lockout arms at top.'
+    ]
+  },
+
+  // FOREARMS
+  {
+    name: 'Barbell Wrist Curl',
+    category: 'Forearms',
+    description: 'Seated forearm flexion curling barbell upward over knees.',
+    primaryMuscles: ['Forearm Flexors'],
+    secondaryMuscles: [],
+    formCues: [
+      'Rest forearms on bench or thighs with palms up.',
+      'Curl barbell upward using wrists only.',
+      'Lower weight smoothly for full stretch.'
+    ]
+  },
+  {
+    name: 'Reverse Barbell Wrist Curl',
+    category: 'Forearms',
+    description: 'Forearm extension exercise targeting top wrist extensors.',
+    primaryMuscles: ['Forearm Extensors'],
+    secondaryMuscles: [],
+    formCues: [
+      'Rest forearms on bench with palms facing down.',
+      'Extend wrists upward toward ceiling.'
+    ]
+  },
+  {
+    name: 'Farmers Walk',
+    category: 'Forearms',
+    description: 'Heavy loaded carry building isometric grip strength and trap endurance.',
+    primaryMuscles: ['Forearms', 'Grip'],
+    secondaryMuscles: ['Trapezius', 'Core'],
+    formCues: [
+      'Pick up heavy dumbbells or kettlebells.',
+      'Walk with tall posture and shoulders back for distance or time.'
     ]
   },
 
@@ -460,6 +698,18 @@ const exercises = [
     ]
   },
   {
+    name: 'Front Squat',
+    category: 'Quads',
+    description: 'Quad-dominant squat variation with barbell rested across front deltoids.',
+    primaryMuscles: ['Quadriceps'],
+    secondaryMuscles: ['Gluteus Maximus', 'Core', 'Upper Back'],
+    formCues: [
+      'Rest bar on front shoulders with elbows raised high.',
+      'Keep torso upright throughout descent.',
+      'Squat deep and drive up through heels.'
+    ]
+  },
+  {
     name: 'Leg Press',
     category: 'Quads',
     description: 'Heavy machine leg press allowing maximal quad loading with minimal spine strain.',
@@ -472,6 +722,18 @@ const exercises = [
     ]
   },
   {
+    name: 'Hack Squat',
+    category: 'Quads',
+    description: 'Fixed-track Machine squat delivering deep quad isolation and knee flexion.',
+    primaryMuscles: ['Quadriceps'],
+    secondaryMuscles: ['Gluteus Maximus'],
+    formCues: [
+      'Place shoulders against pads and feet low on platform.',
+      'Lower into deep squat position.',
+      'Press up through mid-foot.'
+    ]
+  },
+  {
     name: 'Bulgarian Split Squat',
     category: 'Quads',
     description: 'Single-leg squat targeting quad development and hip stability.',
@@ -481,6 +743,30 @@ const exercises = [
       'Rest rear foot on flat bench behind you.',
       'Lower front hip until front thigh is parallel to floor.',
       'Keep front knee tracking over middle toes.'
+    ]
+  },
+  {
+    name: 'Goblet Squat',
+    category: 'Quads',
+    description: 'Dumbbell or kettlebell front-loaded squat great for learning squat depth.',
+    primaryMuscles: ['Quadriceps'],
+    secondaryMuscles: ['Gluteus Maximus', 'Core'],
+    formCues: [
+      'Hold single weight close to chest.',
+      'Squat down between knees while keeping chest high.',
+      'Drive up to standing position.'
+    ]
+  },
+  {
+    name: 'Walking Lunges',
+    category: 'Quads',
+    description: 'Dynamic bodyweight or weighted lunge developing single-leg quad power.',
+    primaryMuscles: ['Quadriceps', 'Gluteus Maximus'],
+    secondaryMuscles: ['Hamstrings', 'Calves'],
+    formCues: [
+      'Step forward and lower rear knee toward floor.',
+      'Push off front heel into next stride.',
+      'Maintain upright torso.'
     ]
   },
   {
@@ -511,6 +797,18 @@ const exercises = [
     ]
   },
   {
+    name: 'Dumbbell RDL',
+    category: 'Hamstrings',
+    description: 'Romanian deadlift using dumbbells for natural hand position and hip hinge.',
+    primaryMuscles: ['Hamstrings', 'Gluteus Maximus'],
+    secondaryMuscles: ['Erector Spinae'],
+    formCues: [
+      'Hold dumbbells against front of thighs.',
+      'Push hips far back as you slide weights down legs.',
+      'Drive hips forward at top.'
+    ]
+  },
+  {
     name: 'Lying Leg Curl',
     category: 'Hamstrings',
     description: 'Isolated machine curl focusing on knee flexion for hamstrings.',
@@ -520,6 +818,18 @@ const exercises = [
       'Align knee joint with machine pivot axis.',
       'Curl pad toward glutes.',
       'Control eccentric return without letting weights slam.'
+    ]
+  },
+  {
+    name: 'Seated Leg Curl',
+    category: 'Hamstrings',
+    description: 'Seated hamstring curl machine providing deep hamstring lengthening at hip.',
+    primaryMuscles: ['Hamstrings'],
+    secondaryMuscles: ['Gastrocnemius'],
+    formCues: [
+      'Secure thigh pad down firmly.',
+      'Curl pad down toward seat.',
+      'Squeeze hamstrings at bottom.'
     ]
   },
 
@@ -536,6 +846,42 @@ const exercises = [
       'Tuck chin and squeeze glutes hard at top.'
     ]
   },
+  {
+    name: 'Glute Bridge',
+    category: 'Glutes',
+    description: 'Floor-based hip extension focusing on glute activation.',
+    primaryMuscles: ['Gluteus Maximus'],
+    secondaryMuscles: ['Hamstrings'],
+    formCues: [
+      'Lie flat on back with knees bent and feet flat.',
+      'Drive hips up until straight line from knees to shoulders.',
+      'Squeeze glutes for 1 second at top.'
+    ]
+  },
+  {
+    name: 'Cable Glute Kickbacks',
+    category: 'Glutes',
+    description: 'Unilateral cable exercise isolating the gluteus maximus.',
+    primaryMuscles: ['Gluteus Maximus'],
+    secondaryMuscles: [],
+    formCues: [
+      'Attach ankle cuff to low pulley.',
+      'Kick leg backward by contracting glute.',
+      'Avoid hyperextending lower back.'
+    ]
+  },
+  {
+    name: 'Hip Abductor Machine',
+    category: 'Glutes',
+    description: 'Machine exercise targeting gluteus medius for hip stability and outer glute shape.',
+    primaryMuscles: ['Gluteus Medius', 'Gluteus Minimus'],
+    secondaryMuscles: [],
+    formCues: [
+      'Sit with outer knees against pads.',
+      'Press legs outward in controlled movement.',
+      'Pause briefly at wide extension.'
+    ]
+  },
 
   // CALVES
   {
@@ -547,6 +893,30 @@ const exercises = [
     formCues: [
       'Lower heels as far as possible for deep bottom stretch.',
       'Explode up onto toes and squeeze calves at top.'
+    ]
+  },
+  {
+    name: 'Seated Calf Raise',
+    category: 'Calves',
+    description: 'Seated calf machine targeting the soleus muscle under bent knees.',
+    primaryMuscles: ['Soleus'],
+    secondaryMuscles: ['Gastrocnemius'],
+    formCues: [
+      'Place pad over lower thighs.',
+      'Lower heels for deep Achilles stretch.',
+      'Raise heels as high as possible.'
+    ]
+  },
+  {
+    name: 'Leg Press Calf Raise',
+    category: 'Calves',
+    description: 'Calf extension performed on leg press machine platform.',
+    primaryMuscles: ['Gastrocnemius'],
+    secondaryMuscles: ['Soleus'],
+    formCues: [
+      'Place balls of feet on bottom edge of platform.',
+      'Flex ankles to press platform away.',
+      'Control deep stretch on return.'
     ]
   },
 
@@ -573,6 +943,42 @@ const exercises = [
       'Hang from pull-up bar with still torso.',
       'Raise legs up to 90 degrees without swinging.',
       'Lower under control.'
+    ]
+  },
+  {
+    name: 'Ab Wheel Rollout',
+    category: 'Core',
+    description: 'Advanced anti-extension core exercise building deep abdominal strength.',
+    primaryMuscles: ['Rectus Abdominis', 'Transverse Abdominis'],
+    secondaryMuscles: ['Lats', 'Shoulders'],
+    formCues: [
+      'Kneel on pad holding ab wheel.',
+      'Roll wheel forward while keeping core tucked and back slightly rounded.',
+      'Pull back using abdominal strength.'
+    ]
+  },
+  {
+    name: 'Plank',
+    category: 'Core',
+    description: 'Isometric anti-extension core exercise for abdominal endurance.',
+    primaryMuscles: ['Transverse Abdominis', 'Rectus Abdominis'],
+    secondaryMuscles: ['Glutes', 'Shoulders'],
+    formCues: [
+      'Support weight on forearms and toes.',
+      'Keep body in straight rigid line.',
+      'Squeeze glutes and core throughout hold.'
+    ]
+  },
+  {
+    name: 'Russian Twists',
+    category: 'Core',
+    description: 'Rotational core movement strengthening internal and external obliques.',
+    primaryMuscles: ['Obliques'],
+    secondaryMuscles: ['Rectus Abdominis'],
+    formCues: [
+      'Sit with knees bent and feet elevated slightly.',
+      'Rotate weight or hands side to side across torso.',
+      'Keep movement controlled without rushing.'
     ]
   }
 ];
@@ -662,7 +1068,7 @@ const runSeeder = async () => {
     console.log('Injecting System Templates...');
     await Template.insertMany(systemTemplates);
 
-    console.log('✅ Database Seeded Successfully with Rich Guides!');
+    console.log(`✅ Database Seeded Successfully with ${exercises.length} Exercises!`);
     process.exit(0);
   } catch (err) {
     console.error('❌ Seeder Error:', err);
