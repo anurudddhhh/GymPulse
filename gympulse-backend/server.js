@@ -12,28 +12,65 @@ const app = express();
 app.use(cors());
 app.use(express.json()); // Parses incoming JSON requests
 
-// Database Connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(async () => {
-    console.log('MongoDB Connected successfully');
-    
-    // DB Migration: Drop old unique index on exercises if it exists
-    try {
-      const db = mongoose.connection.db;
-      const collections = await db.listCollections({ name: 'exercises' }).toArray();
-      if (collections.length > 0) {
-        const indexes = await db.collection('exercises').indexes();
-        const hasOldIndex = indexes.some(idx => idx.name === 'name_1' && idx.unique);
-        if (hasOldIndex) {
-          await db.collection('exercises').dropIndex('name_1');
-          console.log('DB Migration: Dropped legacy unique index on exercises.name');
+// Global connection state for serverless execution (Vercel)
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+const connectDB = async () => {
+  if (cached.conn) {
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: false, // Prevents 10-second query buffering timeouts during cold starts
+    };
+
+    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then(async (m) => {
+      console.log('MongoDB Connected successfully');
+
+      // DB Migration: Run migration without blocking DB connection
+      try {
+        const db = m.connection.db;
+        const collections = await db.listCollections({ name: 'exercises' }).toArray();
+        if (collections.length > 0) {
+          const indexes = await db.collection('exercises').indexes();
+          const hasOldIndex = indexes.some(idx => idx.name === 'name_1' && idx.unique);
+          if (hasOldIndex) {
+            await db.collection('exercises').dropIndex('name_1');
+            console.log('DB Migration: Dropped legacy unique index on exercises.name');
+          }
         }
+      } catch (err) {
+        console.error('DB Migration Error:', err);
       }
-    } catch (err) {
-      console.error('DB Migration Error:', err);
-    }
-  })
-  .catch((err) => console.log('MongoDB Connection Error: ', err));
+
+      return m;
+    });
+  }
+
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
+
+  return cached.conn;
+};
+
+// Database Readiness Middleware - Guarantees DB is fully connected BEFORE routes process requests
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('Database connection error in middleware:', err);
+    res.status(500).json({ error: 'Database connection failed' });
+  }
+});
 
 // Route Middleware
 app.use('/api/workouts', require('./routes/workouts'));
