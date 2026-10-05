@@ -18,8 +18,7 @@ import {
   CheckCircle2,
   AlertTriangle
 } from 'lucide-react';
-import api from '../utils/api';
-
+import api from '../api';
 const DRAFT_KEY = 'gympulse_active_workout_draft';
 
 const CATEGORIES = ['All', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Cardio'];
