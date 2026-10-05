@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 const DEFAULT_REST_SECONDS = 90;
+const DRAFT_STORAGE_KEY = 'gympulse_active_workout_draft';
 
 export default function Workout() {
   const { setHideNav } = useOutletContext() || {};
@@ -35,8 +36,55 @@ export default function Workout() {
   const [deleteTargetId, setDeleteTargetId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Which exercise is in "swap" mode (index or null)
+  // Exercise swap mode index
   const [swappingIndex, setSwappingIndex] = useState(null);
+
+  // 1. AUTO-RESTORE DRAFT ON MOUNT (If page reloaded during an active session)
+  useEffect(() => {
+    try {
+      const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (savedDraft) {
+        const draft = JSON.parse(savedDraft);
+        if (draft && draft.isWorkoutActive) {
+          setWorkoutName(draft.workoutName || '');
+          setDate(draft.date || new Date().toISOString().split('T')[0]);
+          setTimeElapsed(draft.timeElapsed || 0);
+          setExercises(draft.exercises || []);
+          setIsWorkoutActive(true);
+          toast.success('Active workout session restored!');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to restore draft workout', err);
+    }
+  }, []);
+
+  // 2. AUTO-SAVE DRAFT TO LOCALSTORAGE WHENEVER STATE CHANGES
+  useEffect(() => {
+    if (isWorkoutActive) {
+      const draftPayload = {
+        workoutName,
+        date,
+        timeElapsed,
+        exercises,
+        isWorkoutActive: true
+      };
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
+    }
+  }, [workoutName, date, timeElapsed, exercises, isWorkoutActive]);
+
+  // 3. BROWSER UNLOAD WARNING (Warn user if they attempt to refresh or close tab)
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isWorkoutActive) {
+        e.preventDefault();
+        e.returnValue = ''; // Required for browser system dialog to trigger
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isWorkoutActive]);
 
   // Hide bottom nav while workout is active
   useEffect(() => {
@@ -102,6 +150,11 @@ export default function Workout() {
 
   const addRestTime = (secs) => {
     setRestSecondsLeft((p) => p + secs);
+  };
+
+  // Clear Draft Helper
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
   };
 
   // --- Start workout ---
@@ -276,6 +329,8 @@ export default function Workout() {
         date,
         exercises: cleanedExercises,
       });
+      
+      clearDraft(); // Clean up localStorage draft after successful save
       toast.success('Workout logged!', { id: toastId });
       setIsWorkoutActive(false);
       setIsResting(false);
@@ -285,6 +340,7 @@ export default function Workout() {
   };
 
   const handleCancelWorkout = () => {
+    clearDraft(); // Clean up localStorage draft upon explicit cancel
     setIsWorkoutActive(false);
     setTimeElapsed(0);
     setIsResting(false);
