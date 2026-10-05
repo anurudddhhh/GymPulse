@@ -5,11 +5,12 @@ import toast from 'react-hot-toast';
 import ConfirmModal from '../components/ConfirmModal';
 import {
   Clock, X, Plus, Save, Star, Trash2, Play, Dumbbell,
-  Check, Timer, SkipForward, ArrowLeftRight
+  Check, Timer, SkipForward, ArrowLeftRight, Search, ChevronRight
 } from 'lucide-react';
 
 const DEFAULT_REST_SECONDS = 90;
 const DRAFT_STORAGE_KEY = 'gympulse_active_workout_draft';
+const CATEGORIES = ['All', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Cardio'];
 
 export default function Workout() {
   const { setHideNav } = useOutletContext() || {};
@@ -25,6 +26,7 @@ export default function Workout() {
   ]);
 
   const [dbExercises, setDbExercises] = useState({});
+  const [rawExercisesList, setRawExercisesList] = useState([]);
   const [dbTemplates, setDbTemplates] = useState([]);
 
   // Rest timer
@@ -36,8 +38,11 @@ export default function Workout() {
   const [deleteTargetId, setDeleteTargetId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Exercise swap mode index
-  const [swappingIndex, setSwappingIndex] = useState(null);
+  // Searchable Exercise Picker Modal State
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerTargetIndex, setPickerTargetIndex] = useState(null);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerCategory, setPickerCategory] = useState('All');
 
   // 1. AUTO-RESTORE DRAFT ON MOUNT (If page reloaded during an active session)
   useEffect(() => {
@@ -100,13 +105,17 @@ export default function Workout() {
           api.get('/api/exercises'),
           api.get('/api/templates')
         ]);
-        const grouped = exerciseRes.data.reduce((acc, curr) => {
+        
+        const exerciseData = exerciseRes.data || [];
+        setRawExercisesList(exerciseData);
+
+        const grouped = exerciseData.reduce((acc, curr) => {
           if (!acc[curr.category]) acc[curr.category] = [];
           acc[curr.category].push(curr);
           return acc;
         }, {});
         setDbExercises(grouped);
-        setDbTemplates(templateRes.data);
+        setDbTemplates(templateRes.data || []);
       } catch (err) {
         toast.error('Failed to load exercise library');
         console.error(err);
@@ -157,6 +166,24 @@ export default function Workout() {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
   };
 
+  // --- Search Picker Modal Controls ---
+  const openExercisePicker = (exerciseIndex) => {
+    setPickerTargetIndex(exerciseIndex);
+    setPickerSearch('');
+    setPickerCategory('All');
+    setIsPickerOpen(true);
+  };
+
+  const handleSelectExerciseFromPicker = (selectedName) => {
+    if (pickerTargetIndex !== null) {
+      const updated = [...exercises];
+      updated[pickerTargetIndex].exerciseName = selectedName;
+      setExercises(updated);
+    }
+    setIsPickerOpen(false);
+    setPickerTargetIndex(null);
+  };
+
   // --- Start workout ---
   const startWorkout = async (templateId) => {
     if (templateId) {
@@ -203,7 +230,6 @@ export default function Workout() {
     setTimeElapsed(0);
     setIsResting(false);
     setRestSecondsLeft(0);
-    setSwappingIndex(null);
     setIsWorkoutActive(true);
   };
 
@@ -224,15 +250,17 @@ export default function Workout() {
   };
 
   // --- Exercise / set helpers ---
-  const addExercise = () =>
+  const addExercise = () => {
+    const newIndex = exercises.length;
     setExercises([
       ...exercises,
       { exerciseName: '', sets: [{ weight: '', reps: '', completed: false }] },
     ]);
+    openExercisePicker(newIndex);
+  };
 
   const removeExercise = (exerciseIndex) => {
     setExercises(exercises.filter((_, i) => i !== exerciseIndex));
-    if (swappingIndex === exerciseIndex) setSwappingIndex(null);
   };
 
   const addSet = (exerciseIndex) => {
@@ -245,13 +273,6 @@ export default function Workout() {
     const updated = [...exercises];
     updated[exerciseIndex].sets = updated[exerciseIndex].sets.filter((_, i) => i !== setIndex);
     setExercises(updated);
-  };
-
-  const handleExerciseChange = (value, exerciseIndex) => {
-    const updated = [...exercises];
-    updated[exerciseIndex].exerciseName = value;
-    setExercises(updated);
-    setSwappingIndex(null);
   };
 
   const handleSetChange = (value, field, exerciseIndex, setIndex) => {
@@ -347,8 +368,20 @@ export default function Workout() {
     setRestSecondsLeft(0);
     setWorkoutName('');
     setExercises([{ exerciseName: '', sets: [{ weight: '', reps: '', completed: false }] }]);
-    setSwappingIndex(null);
   };
+
+  // Filter exercises for search modal
+  const filteredExercises = rawExercisesList.filter((ex) => {
+    const query = pickerSearch.toLowerCase();
+    const matchesSearch =
+      ex.name.toLowerCase().includes(query) ||
+      (ex.category && ex.category.toLowerCase().includes(query)) ||
+      (ex.targetMuscles && ex.targetMuscles.some((m) => m.toLowerCase().includes(query)));
+    const matchesCategory =
+      pickerCategory === 'All' ||
+      (ex.category && ex.category.toLowerCase() === pickerCategory.toLowerCase());
+    return matchesSearch && matchesCategory;
+  });
 
   const inputClass =
     'w-full bg-bg-elevated rounded-2xl px-5 py-3.5 font-medium placeholder-text-dim focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all border border-border-subtle text-text-main';
@@ -553,36 +586,19 @@ export default function Workout() {
                 </button>
               )}
 
-              {/* Exercise name + swap */}
+              {/* Exercise name + Search Picker Button */}
               <div className="mb-5 pr-16">
-                {swappingIndex === exIndex || !exercise.exerciseName ? (
-                  <select
-                    value={exercise.exerciseName}
-                    onChange={(e) => handleExerciseChange(e.target.value, exIndex)}
-                    className="w-full bg-transparent text-brand text-lg font-bold focus:outline-none border-b border-border-subtle pb-2 appearance-none"
-                    autoFocus={swappingIndex === exIndex}
+                {!exercise.exerciseName ? (
+                  <button
+                    type="button"
+                    onClick={() => openExercisePicker(exIndex)}
+                    className="w-full text-left border-b border-border-subtle pb-2 flex items-center justify-between group"
                   >
-                    <option value="" disabled>
+                    <span className="text-text-dim group-hover:text-brand font-bold text-lg">
                       Choose an exercise...
-                    </option>
-                    {Object.keys(dbExercises).map((category) => (
-                      <optgroup
-                        key={category}
-                        label={`--- ${category.toUpperCase()} ---`}
-                        className="bg-bg-elevated text-text-muted font-bold"
-                      >
-                        {dbExercises[category].map((ex) => (
-                          <option
-                            key={ex._id}
-                            value={ex.name}
-                            className="text-text-main bg-bg-surface"
-                          >
-                            {ex.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                    </span>
+                    <Search size={18} className="text-text-dim group-hover:text-brand" />
+                  </button>
                 ) : (
                   <div className="flex items-center gap-3 border-b border-border-subtle pb-2">
                     <p className="text-brand text-lg font-bold flex-1 truncate">
@@ -590,7 +606,7 @@ export default function Workout() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => setSwappingIndex(exIndex)}
+                      onClick={() => openExercisePicker(exIndex)}
                       className="text-[10px] font-bold text-text-muted hover:text-brand bg-bg-elevated hover:bg-brand/10 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shrink-0"
                       title="Swap exercise — keeps your sets"
                     >
@@ -711,6 +727,95 @@ export default function Workout() {
           </div>
         </form>
       </div>
+
+      {/* SEARCHABLE EXERCISE PICKER MODAL */}
+      {isPickerOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-bg-surface border border-border-subtle rounded-3xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-border-subtle flex items-center justify-between">
+              <h3 className="font-extrabold text-lg text-text-main">Select Exercise</h3>
+              <button
+                type="button"
+                onClick={() => setIsPickerOpen(false)}
+                className="text-text-dim hover:text-text-main p-1 rounded-xl hover:bg-bg-elevated transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Search Input & Category Pills */}
+            <div className="p-4 border-b border-border-subtle space-y-3 bg-bg-base/50">
+              <div className="relative">
+                <Search size={16} className="text-text-dim absolute left-4 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by name or muscle (e.g. Bench, Chest)..."
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  className="w-full bg-bg-elevated border border-border-subtle text-text-main text-sm rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:ring-1 focus:ring-brand/40 font-medium placeholder:text-text-dim"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setPickerCategory(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                      pickerCategory === cat
+                        ? 'bg-brand text-bg-base'
+                        : 'bg-bg-elevated text-text-muted hover:text-text-main'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Exercise List */}
+            <div className="p-3 overflow-y-auto space-y-1 flex-1">
+              {filteredExercises.length === 0 ? (
+                <div className="text-center py-10 text-text-dim text-sm font-medium">
+                  No exercises match your search query.
+                </div>
+              ) : (
+                filteredExercises.map((ex) => (
+                  <button
+                    key={ex._id || ex.name}
+                    type="button"
+                    onClick={() => handleSelectExerciseFromPicker(ex.name)}
+                    className="w-full text-left p-3 rounded-2xl hover:bg-bg-elevated transition-all flex items-center justify-between group border border-transparent hover:border-border-subtle"
+                  >
+                    <div>
+                      <p className="font-bold text-sm text-text-main group-hover:text-brand transition-colors">
+                        {ex.name}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] font-semibold text-text-dim capitalize">
+                          {ex.category}
+                        </span>
+                        {ex.targetMuscles && ex.targetMuscles.length > 0 && (
+                          <>
+                            <span className="text-[10px] text-text-dim">•</span>
+                            <span className="text-[11px] font-medium text-brand/80">
+                              {ex.targetMuscles.join(', ')}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-text-dim group-hover:text-brand transition-colors" />
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Rest Timer */}
       {isResting && (
